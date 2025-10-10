@@ -55,7 +55,7 @@ dados.geral.Ts = 10/1000;       % [s] Período de amostragem
 dados.geral.Tf = 10;            % [s] Tempo total da simulação
 dados.geral.spt = 0;         % [cm] Posição desejada do carro
 dados.geral.angulo_troca = 30;         % [°] Ângulo para troca dos controladores
-dados.geral.guia = 70; % [cm] Tamanho da guia linear
+dados.geral.guia = 0.70; % [m] Tamanho da guia linear
 
 % Condições Iniciais (pêndulo para baixo)
 dados.geral.inicial.theta0 = 170;      % [°] Ângulo inicial
