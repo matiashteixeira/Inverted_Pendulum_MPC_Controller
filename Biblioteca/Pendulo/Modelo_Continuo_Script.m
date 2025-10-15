@@ -1,8 +1,10 @@
-function vet_x_dot = Modelo_Continuo_Script(t, x, u, dados)
+function vet_x_dot = Modelo_Continuo_Script(t, x, dados, t_pulso, amplitude_degrau)
 
-% Para reduzir o número de termos, utilizou-se a Força (N) como sinal de
-% controle
-F = u;
+if t < t_pulso
+    u = amplitude_degrau;
+else
+    u = 0;
+end
 
 % Variáveis necessárias para encontrar x_2dot e theta_2dot
 m = dados.pendulo.m;
@@ -21,6 +23,9 @@ theta = x(2);
 x_dot = x(3);
 theta_dot = x(4);
 
+% Para reduzir o número de termos, utilizou-se a Força (N) como sinal de
+% controle
+F = Volt2Force(u, x_dot, dados.motor);
 
 alpha_a = ((m^2)*(l^2)*((sin(theta))^2)+ M*m*l^2 +(M+m)*I);
 

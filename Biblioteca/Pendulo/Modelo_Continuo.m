@@ -4,10 +4,6 @@ function vet_x_dot = Modelo_Continuo(input, dados)
 x = input(1:4);
 u = input(5);
 
-% Para reduzir o número de termos, utilizou-se a Força (N) como sinal de
-% controle
-F = u;
-
 % Variáveis necessárias para encontrar x_2dot e theta_2dot
 m = dados.pendulo.m;
 l = dados.pendulo.l;
@@ -25,6 +21,9 @@ theta = x(2);
 x_dot = x(3);
 theta_dot = x(4);
 
+% Para reduzir o número de termos, utilizou-se a Força (N) como sinal de
+% controle
+F = Volt2Force(u, x_dot, dados.motor);
 
 alpha_a = ((m^2)*(l^2)*((sin(theta))^2)+ M*m*l^2 +(M+m)*I);
 

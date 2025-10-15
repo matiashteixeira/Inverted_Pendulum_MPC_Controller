@@ -168,26 +168,24 @@ ylabel('Velocidade Ang. (rad/s)');
 legend('Discreto (RK4)', 'Contínuo (ode45)');
 grid on;
 
-%% Plot dos Resultados Experimentais
-
+%%
 figure;
 importados = importdata('Ensaios\dados_degrau_154022.csv');
 t_import = importados(:,1);
 x_import = importados(:,2:5);
-fat_conv_pos = 146.233;
-fat_conv_ang = 2*pi/2400; 
+fat_conv = 146.233;
 
-posicao_import = x_import(:, 3)./fat_conv_pos;
-angulo_import = x_import(:, 1).*fat_conv_ang;
-velocidade_import = x_import(:, 4)./fat_conv_pos;
-vel_angular_import = x_import(:, 2).*fat_conv_ang;
+posicao_import = x_import(:, 3)./fat_conv;
+angulo_import = x_import(:, 1);
+velocidade_import = x_import(:, 4)./fat_conv;
+vel_angular_import = x_import(:, 2);
 
 % 1. Posição do Carrinho
 subplot(2, 2, 1);
 plot(t_import, posicao_import, 'k-'); % 'k-' para uma linha preta sólida
 title('Posição do Carrinho (Real)');
 xlabel('Tempo (s)');
-ylabel('Posição (cm)');
+ylabel('Posição (m)');
 grid on;
 
 % 2. Ângulo do Pêndulo
@@ -203,7 +201,7 @@ subplot(2, 2, 3);
 plot(t_import, velocidade_import, 'k-');
 title('Velocidade do Carrinho (Real)');
 xlabel('Tempo (s)');
-ylabel('Velocidade (cm/s)');
+ylabel('Velocidade (m/s)');
 grid on;
 
 % 4. Velocidade Angular do Pêndulo
