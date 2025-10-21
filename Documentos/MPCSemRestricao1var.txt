@@ -9,7 +9,7 @@ MPC.A = A; MPC.B = B;
 MPC.Cr=[1 0 0 0];
 MPC.Qy=100;
 MPC.Qu=1;
-MPC.N=80;
+MPC.N=150;
 
 %--------------------------------------------
 [H,F1,F2,~]=compute_cost_matrices(MPC);

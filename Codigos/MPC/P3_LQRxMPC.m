@@ -1,7 +1,7 @@
 %% Comparação - LQR x MPC Sem Restrições
 
-A = planta.A;
-B = planta.B;
+A = dados.planta.A;
+B = dados.planta.B;
 
 MPC.Cr = eye(length(B));
 MPC.Qy = controlador.lqr.Q;

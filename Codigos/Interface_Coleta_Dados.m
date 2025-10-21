@@ -272,9 +272,9 @@ function Interface_Coleta_Dados()
     
         exportarBtn.Enable = 'on';
         if strcmp(tipo,'Degrau')
-            nome_arquivo = sprintf('dados_degrau_%s.csv', datestr(now,'HHMMSS'));
+            nome_arquivo = sprintf('dados_degrau_I%d_D%d_%s.csv', intensidade, duracao, datestr(now,'HHMMSS'));
         else
-            nome_arquivo = sprintf('dados_senoide_%s.csv', datestr(now,'HHMMSS'));
+            nome_arquivo = sprintf('dados_senoide_I%d_D%d_%s.csv', intensidade, duracao, datestr(now,'HHMMSS'));
         end
         statusLabel.Text = 'Coleta concluída! Pronto para exportar.';
         drawnow;

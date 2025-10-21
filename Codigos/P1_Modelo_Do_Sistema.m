@@ -15,7 +15,7 @@ dados.geral.angulo_troca = 30;         % [°] Ângulo para troca dos controlador
 dados.geral.guia = 0.70; % [m] Tamanho da guia linear
 
 % Condições Iniciais
-dados.geral.inicial.theta0 = 0;      % [°] Ângulo inicial
+dados.geral.inicial.theta0 = 10;      % [°] Ângulo inicial
 dados.geral.inicial.theta_dot0 = 0;   % [°/s] Velocidade angular inicial
 dados.geral.inicial.x0 = 0;           % [m] Posição inicial do carro
 dados.geral.inicial.x_dot0 = 0;       % [m/s] Velocidade inicial do carro
@@ -24,17 +24,17 @@ dados.geral.inicial.x_dot0 = 0;       % [m/s] Velocidade inicial do carro
 % Dados do pêndulo
 % ==============================
 dados.pendulo.m = 10.5/1000;        % [kg]    Massa da haste do pêndulo
-dados.pendulo.l = 0.32;        % [m]     Distância do ponto de fixação até o centro de gravidade
-dados.pendulo.I = 0.00007892; %(1/12)*dados.pendulo.m*(dados.pendulo.l*2)^2;  % [kg·m^2] Momento de inércia da haste em relação ao centro
-dados.pendulo.b = 0.00007892;   % [N·m·s] Coeficiente de amortecimento viscoso no eixo de fixação
+dados.pendulo.l = 0.18;        % [m]     Distância do ponto de fixação até o centro de gravidade
+dados.pendulo.I = (1/12)*dados.pendulo.m*(dados.pendulo.l*2)^2;  % [kg·m^2] Momento de inércia da haste em relação ao centro
+dados.pendulo.b = 0.00005;   % [N·m·s] Coeficiente de amortecimento viscoso no eixo de fixação
 dados.pendulo.r_massa = 0.01; % [m] Raio da massa na ponta do pêndulo 
 dados.pendulo.E_des = 2*dados.pendulo.m*dados.geral.g*dados.pendulo.l; % [J] Energia Potencial Desejada do Pêndulo
 
 % ==============================
 % Dados do carro
 % ==============================
-dados.carro.m = 308.82/1000;         % [kg]    Massa do carro
-dados.carro.c = 0.0002;          % [N·s/m] Coeficiente de amortecimento viscoso entre carro e guia
+dados.carro.m = 208.82/1000;         % [kg]    Massa do carro
+dados.carro.c = 2;          % [N·s/m] Coeficiente de amortecimento viscoso entre carro e guia
 dados.carro.l = 0.1;           % [m] Largura do carro
 dados.carro.h = 0.05;           % [m] Altura do carro
 
@@ -47,6 +47,39 @@ dados.motor.Kt = 0.17;         % [N·m/A]  Constante de torque (Torque/Corrente)
 dados.motor.R  = 0.071;         % [-]      Relação de transmissão (1/14)
 
 %% Geração das matrizes de espaço de estados
+
+m0 = dados.carro.m;
+m1 = dados.pendulo.m;
+l = dados.pendulo.l;
+I = dados.pendulo.I;
+g = dados.geral.g;
+tau = dados.geral.Ts;
+
+
+alpha1 = (m1*l)/(m1*l^2+I); beta1 = g*alpha1;
+alpha0 = m0+m1-alpha1*m1*l; beta0 = m1*l*beta1;
+
+% x = [theta theta_dot r r_dot]
+
+Ac = [0 1 0 0; ((alpha1*beta0)/alpha0)+beta1 0 0 0; 0 0 0 1
+                  -beta0/alpha0 0 0 0];
+
+Bc = [0; -alpha1/alpha0; 0; 1/alpha0];
+
+[A, B] = c2d(Ac,Bc,tau);
+
+C = [1 0 0 0
+     0 0 1 0];
+
+dados.planta.Ac = Ac; dados.planta.Bc = Bc; 
+dados.planta.A = A; dados.planta.B = B; dados.planta.C = C;
+
+clear alpha0 alpha1 beta0 beta1;
+clear A Ac B Bc C g l I m0 m1 tau;
+
+
+
+%%
 
 % Estados x1=x, x2=theta, x3=x_ponto, x4=theta_ponto
 g = dados.geral.g;
@@ -80,17 +113,17 @@ C = [1 0 0 0
 
 D = 0;
 
-planta.Ac = Ac;
-planta.Bc = Bc;
-planta.C = C;
-planta.D = D;
+dados.planta.Ac = Ac;
+dados.planta.Bc = Bc;
+dados.planta.C = C;
+dados.planta.D = D;
 
 [A, B] = c2d(Ac,Bc,tau);
 
-planta.A = A;
-planta.B = B;
+dados.planta.A = A;
+dados.planta.B = B;
 
-clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc;
+clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 
 %% Simulação do Modelo
 
@@ -116,19 +149,21 @@ tspan = [0 30];
 
 [t2,x2] = ode45(@(t2,x2) Modelo_Continuo_Script(t2, x2, dados, duracao_degrau, amplitude_degrau), tspan, x0);
 
+clear amplitude_degrau duracao_degrau k t_final tau tspan x0;
+
 %% Plot dos Resultados
 
 figure; % Cria uma nova janela de figura
 
 % 1. Posição do Carrinho (x)
 subplot(2, 2, 1);
-stairs(t, x(:, 1), 'b-');          % Plota o resultado discreto (linha azul sólida)
+stairs(t, x(:, 1).*100, 'b-');          % Plota o resultado discreto (linha azul sólida)
 hold on;                                  % Mantém o gráfico atual ativo
-plot(t2, x2(:, 1), 'r--'); % Sobrepõe o resultado contínuo (linha vermelha tracejada)
+plot(t2, x2(:, 1).*100, 'r--'); % Sobrepõe o resultado contínuo (linha vermelha tracejada)
 hold off;                                 % Libera o gráfico
 title('Posição do Carrinho');
 xlabel('Tempo (s)');
-ylabel('Posição (m)');
+ylabel('Posição (cm)');
 legend('Discreto (RK4)', 'Contínuo (ode45)');
 grid on;
 
@@ -168,6 +203,8 @@ ylabel('Velocidade Ang. (rad/s)');
 legend('Discreto (RK4)', 'Contínuo (ode45)');
 grid on;
 
+clear t t2 x x2 u;
+
 %% Plot dos Resultados Experimentais
 
 figure;
@@ -184,7 +221,7 @@ vel_angular_import = x_import(:, 2).*fat_conv_ang;
 
 % 1. Posição do Carrinho
 subplot(2, 2, 1);
-plot(t_import, posicao_import, 'k-'); % 'k-' para uma linha preta sólida
+stairs(t_import, posicao_import, 'k-'); % 'k-' para uma linha preta sólida
 title('Posição do Carrinho (Real)');
 xlabel('Tempo (s)');
 ylabel('Posição (cm)');
@@ -192,7 +229,7 @@ grid on;
 
 % 2. Ângulo do Pêndulo
 subplot(2, 2, 2);
-plot(t_import, angulo_import, 'k-');
+stairs(t_import, angulo_import, 'k-');
 title('Ângulo do Pêndulo (Real)');
 xlabel('Tempo (s)');
 ylabel('Ângulo (rad)');
@@ -200,17 +237,18 @@ grid on;
 
 % 3. Velocidade do Carrinho
 subplot(2, 2, 3);
-plot(t_import, velocidade_import, 'k-');
+stairs(t_import, velocidade_import./100, 'k-');
 title('Velocidade do Carrinho (Real)');
 xlabel('Tempo (s)');
-ylabel('Velocidade (cm/s)');
+ylabel('Velocidade (m/s)');
 grid on;
 
 % 4. Velocidade Angular do Pêndulo
 subplot(2, 2, 4);
-plot(t_import, vel_angular_import, 'k-');
+stairs(t_import, vel_angular_import, 'k-');
 title('Velocidade Angular (Real)');
 xlabel('Tempo (s)');
 ylabel('Velocidade Ang. (rad/s)');
 grid on;
 
+clear angulo_import fat_conv_ang fat_conv_pos importados posicao_import t_import vel_angular_import velocidade_import x_import;

@@ -4,8 +4,8 @@
 
 %% Declaração de variáveis
 
-A = planta.A;
-B = planta.B; 
+A = dados.planta.A;
+B = dados.planta.B; 
 limite = dados.geral.guia/2;
 
 tau = dados.geral.Ts; 
@@ -16,7 +16,7 @@ MPC.B = B;
 MPC.Cr = [1 0 0 0]; 
 
 MPC.Qy = 1e9; MPC.Qu=1; 
-MPC.N = 150; 
+MPC.N = 80; 
 
 MPC.Cc = [1 0 0 0];
 MPC.ycmin = -35; MPC.ycmax=35; 
@@ -29,7 +29,7 @@ MPC.H = (MPC.H + MPC.H') / 2;
 %-------------------------
 
 x0=[0;0;0;0];
-tsim=20;
+tsim=8;
 lest=(0:tau:tsim)';
 nt=size(lest, 1);
 lesx=zeros(nt,length(B)); lesy=zeros(nt, 1); lesu=zeros(nt, 1);
@@ -38,14 +38,15 @@ yref = ones(nt,1);
 lesx(1,:)=x0';
 lesy(1) = MPC.Cr*lesx(1, :)'; 
 for i=1:nt-1
+    sprintf('%d de %d', i, nt-1);
     yref_pred=yref(i+1:i+MPC.N);
 
     F=MPC.F1*lesx(i,:)'+MPC.F2*yref_pred;
     Bineq=MPC.G1*lesx(i, :)'+MPC.G2*MPC.ulast+MPC.G3; 
 
     options=optimset('maxIter', 100000); 
-    utilde_opt=quadprog(MPC.H, F, MPC.Aineq, Bineq,... 
-        [], [], MPC.utildemin, MPC.utildemax);
+    utilde_opt = quadprog(MPC.H, F, MPC.Aineq, Bineq, ...
+    [], [], MPC.utildemin, MPC.utildemax, [], options);
 
     u=P_i(1, nu, MPC.N)*utilde_opt;
     lesu (i, :)=u'; 

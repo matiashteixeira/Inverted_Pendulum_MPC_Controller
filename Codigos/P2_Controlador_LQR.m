@@ -2,8 +2,8 @@
 clc; close all;
 
 % Definição das matrizes de ponderamento do LQR
-controlador.lqr.Q = diag([1 10 0 0]);controlador.lqr.R = 0.001;
-controlador.lqr.K = dlqr(planta.A,planta.B,controlador.lqr.Q,controlador.lqr.R);
+controlador.lqr.Q = diag([1 0 10 0]);controlador.lqr.R = 0.001;
+controlador.lqr.K = dlqr(dados.planta.A,dados.planta.B,controlador.lqr.Q,controlador.lqr.R);
 
 %% Simulação em malha fechada
 
@@ -22,7 +22,7 @@ sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
 
 for k = 0:Ts:Tf
     
-    novo_estado = labInt.RK4_discrete(x(i,:),u_force(i),Ts,dados)';
+    novo_estado = RK4_discrete(x(i,:),u_force(i),Ts,dados)';
     x(i+1,:) = novo_estado';
 
     t(i + 1) = k;
