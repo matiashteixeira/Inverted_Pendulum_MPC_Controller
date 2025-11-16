@@ -15,7 +15,7 @@ function [Aineq, G1, G2, G3] = compute_constraits_matrices(MPC)
     interPinuN=zeros(N*nu,N*nu);
 
     for i=1:N
-        Psi_i = [inter_Psi_i zeros(n,N-i)*nu];
+        Psi_i = [inter_Psi_i zeros(n,(N-i)*nu)];
         Pi_nuN = interPinuN((i-1)*nu+1:i*nu,:);
         Aineq_1 = [Aineq_1;Cc*Psi_i+Dc*Pi_nuN];
         ind1 = (i-1)*nu+1:i*nu;
