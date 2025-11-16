@@ -1,8 +1,19 @@
 %% Controlador LQR Discreto
-clc; close all;
+clc; 
+
+% [Q_opt, R_opt] = optimize_LQR(dados);
+% 
+% controlador.lqr.Q = Q_opt;
+% controlador.lqr.R = R_opt;
+% controlador.lqr.K = dlqr(dados.planta.A, dados.planta.B, Q_opt, R_opt);
+% 
+% disp("Q otimizado = "); disp(Q_opt);
+% disp("R otimizado = "); disp(R_opt);
+
+%%
 
 % Definição das matrizes de ponderamento do LQR
-controlador.lqr.Q = diag([500 100 0 0]);controlador.lqr.R = 0.001;
+controlador.lqr.Q = diag([1 5 1 1]);controlador.lqr.R = 0.001;
 controlador.lqr.K = dlqr(dados.planta.A,dados.planta.B,controlador.lqr.Q,controlador.lqr.R);
 
 %% Simulação em malha fechada
@@ -10,25 +21,32 @@ controlador.lqr.K = dlqr(dados.planta.A,dados.planta.B,controlador.lqr.Q,control
 Ts = dados.geral.Ts; % Período de Amostragem
 Tf = dados.geral.Tf; % Tempo final da simulação
 
-x(1,:) = [dados.geral.inicial.x0 dados.geral.inicial.theta0*pi/180 dados.geral.inicial.x_dot0 dados.geral.inicial.theta_dot0]; % Estado Inicial
+x(1,:) = [0 175*pi/180 0 0]; % Estado Inicial
 u_volt(1) = 0;
 u_force(1) = 0;
 t(1) = 0;
 
-x_des = [dados.geral.spt/100; 0; 0; 0];            % Estado desejado
+x_des = [0; 180*pi/180; 0; 0];            % Estado desejado
 
 i = 1;
 sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
 
+dead_zone = 1*pi/180;
+
 for k = 0:Ts:Tf
-    
-    novo_estado = RK4_discrete(x(i,:),u_force(i),Ts,dados)';
+    t(i + 1) = k;
+
+    novo_estado = RK4_discrete(x(i,:),u_volt(i),Ts,dados)';
     x(i+1,:) = novo_estado';
 
-    t(i + 1) = k;
     
-    u_volt(i+1) = -controlador.lqr.K * (novo_estado - x_des);
-    u_volt(i+1) = sat(u_volt(i+1),12,-12);
+    
+    %if novo_estado(2) < dead_zone
+    %    u_volt(i+1) = 0;
+    %else
+        u_volt(i+1) = -controlador.lqr.K * (novo_estado - x_des);
+        u_volt(i+1) = sat(u_volt(i+1),12,-12);
+    %end
 
     u_force(i+1) = Volt2Force(u_volt(i+1),novo_estado(3),dados.motor);
 
@@ -43,7 +61,7 @@ simulacao.velocidade_carro = x(:,3).*100;
 simulacao.u_force = u_force;
 simulacao.u_volt = u_volt;
 
-clear k u_force u_volt i novo_estado t Tf Ts x x_des sat;
+%clear k u_force u_volt i novo_estado t Tf Ts x x_des sat;
 
 %% Plot dos dados
 
