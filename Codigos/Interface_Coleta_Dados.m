@@ -12,6 +12,7 @@ function Interface_Coleta_Dados()
         tab1 = uitab(tabgp,'Title','Análise Malha Aberta');
         tab2 = uitab(tabgp,'Title','Controle Manual');
         tab3 = uitab(tabgp,'Title','Configurações');
+        tab4 = uitab(tabgp,'Title','Controlador - LQR + Swing Up Energia');
 
         painelLogo = uipanel(f, ...
             'Units', 'normalized', ...
@@ -54,7 +55,7 @@ function Interface_Coleta_Dados()
     % Text field Porta Serial
     portaConfigEdit = uieditfield(painelESP32,'text', ...
         'Position',[180 painelESP32.Position(4)-50 80 20], ...
-        'Value','COM3');
+        'Value','COM5');
     
     % Label Baud Rate
     uilabel(painelESP32,'Text','Baud rate:', ...
@@ -265,10 +266,10 @@ function Interface_Coleta_Dados()
         tPlot = tiledlayout(2,2,'Padding','compact');
         t_plot = tempo;
     
-        ax1 = nexttile; plot(ax1,t_plot,pos); title('Posição Carro'); xlabel('t (s)'); grid on; ylabel('Pos (unid.)');
-        ax2 = nexttile; plot(ax2,t_plot,pos_dot); title('Velocidade Carro'); xlabel('t (s)'); grid on; ylabel('Velocidade (unid./s)');
-        ax3 = nexttile; plot(ax3,t_plot,theta); title('Ângulo Pêndulo'); xlabel('t (s)'); grid on; ylabel('Ângulo (rad)');
-        ax4 = nexttile; plot(ax4,t_plot,theta_dot); title('Velocidade Angular Pêndulo'); xlabel('t (s)'); grid on; ylabel('Velocidade Angular (rad/s)');
+        ax1 = nexttile; plot(ax1,t_plot,pos); title('Posição Carro'); xlabel('t (s)'); grid on; ylabel('Pos (cm)');
+        ax2 = nexttile; plot(ax2,t_plot,pos_dot); title('Velocidade Carro'); xlabel('t (s)'); grid on; ylabel('Velocidade (cm/s)');
+        ax3 = nexttile; plot(ax3,t_plot,theta); title('Ângulo Pêndulo'); xlabel('t (s)'); grid on; ylabel('Ângulo (°)');
+        ax4 = nexttile; plot(ax4,t_plot,theta_dot); title('Velocidade Angular Pêndulo'); xlabel('t (s)'); grid on; ylabel('Velocidade Angular (°/s)');
     
         exportarBtn.Enable = 'on';
         if strcmp(tipo,'Degrau')
@@ -338,7 +339,7 @@ end
     % Botão Esquerda
     btnEsq = uibutton(painelControle, 'push', ...
         'Text','⟵ Esquerda', ...
-        'Position',[80 painelControle.Position(4)-95 120 60], ...
+        'Position',[40 painelControle.Position(4)-95 120 60], ... % Posição X ajustada para centralizar o Zerar
         'Enable','off', ...
         'FontSize',14, ...
         'ButtonPushedFcn', @(src,~) acaoImpulso('L'));
@@ -346,43 +347,18 @@ end
     % Botão Direita
     btnDir = uibutton(painelControle, 'push', ...
         'Text','Direita ⟶', ...
-        'Position',[280 painelControle.Position(4)-95 120 60], ...
+        'Position',[340 painelControle.Position(4)-95 120 60], ... % Posição X ajustada
         'Enable','off', ...
         'FontSize',14, ...
         'ButtonPushedFcn', @(src,~) acaoImpulso('R'));
-    
-    % --- Painel para Monitoramento de Variáveis ---
-    painelMonitor = uipanel(tab2, ...
-        'Title','Monitoramento de Variáveis', ...
-        'FontWeight','bold', ...
-        'FontSize',12, ...
-        'Position',[10 painelControle.Position(4)+98 500 120], ...
-        'BackgroundColor',[0.95 0.95 0.95], ...
-        'BorderType','line');
-    
-    % Labels e campos para Ângulo
-    uilabel(painelMonitor,'Text','Ângulo (°):','Position',[40 painelMonitor.Position(4)-50 100 20]);
-    anguloEdit = uieditfield(painelMonitor,'numeric','Position',[140 painelMonitor.Position(4)-50 80 20],'Editable','off');
-    
-    % Labels e campos para Velocidade Angular
-    uilabel(painelMonitor,'Text','Vel. Angular (°/s):','Position',[260 painelMonitor.Position(4)-50 120 20]);
-    angVelEdit = uieditfield(painelMonitor,'numeric','Position',[380 painelMonitor.Position(4)-50 80 20],'Editable','off');
-    
-    % Labels e campos para Posição do Carro
-    uilabel(painelMonitor,'Text','Posição Carro (cm):','Position',[40 painelMonitor.Position(4)-80 100 20]);
-    posEdit = uieditfield(painelMonitor,'numeric','Position',[140 painelMonitor.Position(4)-80 80 20],'Editable','off');
-    
-    % Labels e campos para Velocidade do Carro
-    uilabel(painelMonitor,'Text','Vel. Carro (cm/s):','Position',[260 painelMonitor.Position(4)-80 120 20]);
-    velEdit = uieditfield(painelMonitor,'numeric','Position',[380 painelMonitor.Position(4)-80 80 20],'Editable','off');
-    
-    % Cria o timer de leitura periódica (não visual, permanece igual)
-    leituraTimer = timer( ...
-        'ExecutionMode', 'fixedRate', ...
-        'Period', 0.1, ...            % 100 ms
-        'TimerFcn', @atualizarLeitura, ...
-        'ErrorFcn', @(~,~) disp('Erro no timer de leitura.') ...
-    );
+
+    % Botão Zerar (NOVO)
+    btnZerar = uibutton(painelControle, 'push', ...
+        'Text','Zerar', ...
+        'Position',[190 painelControle.Position(4)-95 120 60], ... % Posição central
+        'Enable','off', ... % Começa desabilitado
+        'FontSize',14, ...
+        'ButtonPushedFcn', @(src,~) acaoZerar()); % Chama a nova função
 
     % ==============================
     % FUNÇÕES ABA 2 - CONTROLE MANUAL
@@ -402,12 +378,12 @@ end
             configureTerminator(sManual,"LF");
             flush(sManual);
             statusManual.Text = 'Conectado!';
-
-            start(leituraTimer);
+            %start(leituraTimer);
             
             % Habilita e Desabilita botões
             btnEsq.Enable = 'on';
             btnDir.Enable = 'on';
+            btnZerar.Enable = 'on'; % NOVO: Habilita o botão Zerar
             conectarBtn.Enable = 'off';
             desconectarBtn.Enable = 'on';
             
@@ -422,10 +398,6 @@ end
     end
     
     function desconectarManual(~,~)
-        if isvalid(leituraTimer)
-            stop(leituraTimer);
-        end
-
         if ~isempty(sManual) && isvalid(sManual)
             % Limpa o objeto serialport, liberando a porta COM
             clear sManual; 
@@ -437,6 +409,7 @@ end
         % Habilita e Desabilita botões
         btnEsq.Enable = 'off';
         btnDir.Enable = 'off';
+        btnZerar.Enable = 'off'; % NOVO: Desabilita o botão Zerar
         conectarBtn.Enable = 'on';
         desconectarBtn.Enable = 'off';
         
@@ -454,6 +427,10 @@ end
             desconectarManual(); % Reinicia o estado dos botões
         end
     end
+
+    function acaoZerar()
+        enviar('Z');
+    end
     
     function acaoImpulso(sentido)
         % 1. Envia o comando de movimento (L ou R)
@@ -465,25 +442,6 @@ end
         
         % 3. Envia o comando de parada (P)
         enviar('P');
-    end
-
-    function atualizarLeitura(~,~)
-        try
-            if ~isempty(sManual) && isvalid(sManual) && sManual.NumBytesAvailable > 0
-                linha = readline(sManual);
-                valores = strsplit(strtrim(linha),';');
-
-                if numel(valores) == 5
-                    % [tempo; theta; theta_dot; pos; pos_dot]
-                    anguloEdit.Value = str2double(valores{2});
-                    angVelEdit.Value = str2double(valores{3});
-                    posEdit.Value = str2double(valores{4});
-                    velEdit.Value = str2double(valores{5});
-                end
-            end
-        catch
-            % Se der erro de leitura, apenas ignora
-        end
     end
 
     function closeFig
@@ -502,6 +460,180 @@ end
         end
     
     end
+
+    %% -------------------------
+    % ABA 04: Controlador lQR + Swing Up energia
+    %---------------------------
+    
+    painelLQR = uipanel(tab4, ...
+    'Title','Controlador LQR + Swing Up Baseado em Energia', ...
+    'FontWeight','bold', ...
+    'FontSize',12, ...
+    'Position',[10 tab4.Position(4)-250 300 220], ... 
+    'BackgroundColor',[0.95 0.95 0.95], ...
+    'BorderType','line');
+
+    uicontrol(painelLQR, 'Style','text', 'String','Tempo de Coleta (s):', ...
+        'Position',[10 170 120 20], 'HorizontalAlignment','left', 'BackgroundColor',[0.95 0.95 0.95]);
+    tempoColetaLQR = uicontrol(painelLQR, 'Style','edit', 'String','30', ...
+        'Position',[130 170 50 25], 'BackgroundColor','white');
+    
+    uicontrol(painelLQR, 'Style','text', 'String','K1 (x)', ...
+        'Position',[10 130 50 20], 'HorizontalAlignment','left', 'BackgroundColor',[0.95 0.95 0.95]);
+    editK1 = uicontrol(painelLQR, 'Style','edit', 'String','-15', ...
+        'Position',[60 130 50 25], 'BackgroundColor','white');
+    
+    uicontrol(painelLQR, 'Style','text', 'String','K4 (θ̇)', ...
+        'Position',[130 130 50 20], 'HorizontalAlignment','left', 'BackgroundColor',[0.95 0.95 0.95]);
+    editK4 = uicontrol(painelLQR, 'Style','edit', 'String','32', ...
+        'Position',[180 130 50 25], 'BackgroundColor','white');
+    
+    uicontrol(painelLQR, 'Style','text', 'String','K2 (θ)', ...
+        'Position',[10 100 60 20], 'HorizontalAlignment','left', 'BackgroundColor',[0.95 0.95 0.95]);
+    editK2 = uicontrol(painelLQR, 'Style','edit', 'String','170', ...
+        'Position',[60 100 50 25], 'BackgroundColor','white');
+    
+    uicontrol(painelLQR, 'Style','text', 'String','K Swing', ...
+        'Position',[130 100 50 20], 'HorizontalAlignment','left', 'BackgroundColor',[0.95 0.95 0.95]);
+    editKswing = uicontrol(painelLQR, 'Style','edit', 'String','45', ...
+        'Position',[180 100 50 25], 'BackgroundColor','white');
+    
+    uicontrol(painelLQR, 'Style','text', 'String','K3 (ẋ)', ...
+        'Position',[10 70 50 20], 'HorizontalAlignment','left', 'BackgroundColor',[0.95 0.95 0.95]);
+    editK3 = uicontrol(painelLQR, 'Style','edit', 'String','-80', ...
+        'Position',[60 70 50 25], 'BackgroundColor','white');
+    
+    statusLQR = uilabel(painelLQR,'Text','Aguardando comando...','Position',[50 40 200 22],'FontWeight','bold','HorizontalAlignment','center');
+    
+    btnAtivaLQR = uicontrol(painelLQR, 'Style','pushbutton', 'String','Ativar', ...
+        'Position',[95 10 60 25], 'BackgroundColor',[0.7 0.9 0.7], ...
+        'Callback',@(src,event) ativarLQR());
+    
+    btnDesativaLQR = uicontrol(painelLQR, 'Style','pushbutton', 'String','Desativar', ...
+        'Position',[165 10 70 25], 'BackgroundColor',[0.9 0.7 0.7], ...
+        'Callback',@(src,event) desativarLQR());
+
+    % ==============================
+    % FUNÇÕES ABA 4 - CONTROLADOR LQR (COM COLETA)
+    % ==============================
+
+    function ativarLQR()
+        
+        porta = portaConfigEdit.Value;
+        baud  = str2double(baudConfigEdit.Value);
+       
+        % Parâmetros LQR/Swing Up
+        K1 = editK1.String;
+        K2 = editK2.String;
+        K3 = editK3.String;
+        K4 = editK4.String;
+        Kswing = editKswing.String;
+        
+        % Definindo o tempo de coleta para a resposta do controlador
+        tempo_total = str2double(tempoColetaLQR.String);
+        disp(tempo_total);
+        statusLQR.Text = 'Conectando à serial...';
+        drawnow;
+    
+        try
+            % 1. Abre a porta serial (similar a iniciarColeta)
+            sLQR = serialport(porta, baud);
+            configureTerminator(sLQR,"LF");
+            flush(sLQR);
+        catch ME
+            uialert(f,sprintf('Falha ao conectar à serial. Porta: %s. Erro: %s', porta, ME.message),'Erro de Conexão');
+            statusLQR.Text = 'Erro ao conectar.';
+            return;
+        end
+        
+        % 2. Envia o comando LQR/Swing Up
+        % Formato: Q,K1,K2,K3,K4,Kswing
+        comando = sprintf('Q,%s,%s,%s,%s,%s\n', K1, K2, K3, K4, Kswing);
+        writeline(sLQR, comando);
+        pause(0.05);
+        
+        % 3. Inicia o loop de coleta de dados (similar a iniciarColeta)
+        periodo = 10/1000; % 10ms
+        t_inicio = tic;
+    
+        tam_estimado = ceil(tempo_total/periodo) + 100;
+        tempo = zeros(1,tam_estimado);
+        theta = zeros(1,tam_estimado);
+        theta_dot = zeros(1,tam_estimado);
+        pos = zeros(1,tam_estimado);
+        pos_dot = zeros(1,tam_estimado);
+        i = 1;
+    
+        statusLQR.Text = 'Controlador Ativo! Coletando dados ';
+        drawnow;
+        
+        % Loop de coleta
+        while toc(t_inicio) < tempo_total
+            if sLQR.NumBytesAvailable > 0
+                raw_data = readline(sLQR);
+                valores = strsplit(strtrim(raw_data),';');
+                if length(valores) == 5
+                    tempo(i)  = str2double(valores{1});
+                    theta(i)  = str2double(valores{2});
+                    theta_dot(i)  = str2double(valores{3});
+                    pos(i)    = str2double(valores{4});
+                    pos_dot(i) = str2double(valores{5});
+                    i = i + 1;
+                end
+            end
+            if i > tam_estimado
+                % Expande o vetor se necessário
+                tam_estimado = tam_estimado + 5000;
+                tempo = [tempo zeros(1,5000)];
+                theta = [theta zeros(1,5000)];
+                theta_dot = [theta_dot zeros(1,5000)];
+                pos = [pos zeros(1,5000)];
+                pos_dot = [pos_dot zeros(1,5000)];
+            end
+        end
+    
+        % 4. Encerra a coleta e plota os resultados
+        
+        % Envia o comando 'X' para desativar o controlador no ESP32 antes de fechar
+        writeline(sLQR, 'X\n'); 
+        pause(0.1); 
+        
+        clear sLQR; % Fecha serial
+    
+        % Ajusta vetores ao tamanho real
+        tempo = tempo(1:i-1);
+        theta = theta(1:i-1);
+        theta_dot = theta_dot(1:i-1);
+        pos = pos(1:i-1);
+        pos_dot = pos_dot(1:i-1);
+    
+        % Salva globalmente (opcional, mas bom para exportar)
+        dados = [tempo' theta' theta_dot' pos' pos_dot'];
+        
+        % Plota os dados (similar a iniciarColeta)
+        f2 = figure('Name','Resposta do Controlador LQR','Position',[600 100 800 500]);
+        tPlot = tiledlayout(2,2,'Padding','compact');
+        t_plot = tempo;
+    
+        ax1 = nexttile; plot(ax1,t_plot,pos); title('Posição Carro'); xlabel('t (s)'); grid on; ylabel('Pos (cm)');
+        ax2 = nexttile; plot(ax2,t_plot,pos_dot); title('Velocidade Carro'); xlabel('t (s)'); grid on; ylabel('Velocidade (cm/s)');
+        ax3 = nexttile; plot(ax3,t_plot,theta); title('Ângulo Pêndulo'); xlabel('t (s)'); grid on; ylabel('Ângulo (°)');
+        ax4 = nexttile; plot(ax4,t_plot,theta_dot); title('Velocidade Angular Pêndulo'); xlabel('t (s)'); grid on; ylabel('Velocidade Angular (°/s)');
+    
+        statusLQR.Text = 'Coleta e Controle Concluídos! Dados Plotados.';
+        
+        % Define o nome do arquivo para exportação
+        nome_arquivo = sprintf('dados_LQR_K1_%s_K2_%s_%s.csv', K1, K2, datestr(now,'HHMMSS'));
+        % Você precisará de um botão 'Exportar' na Aba 4 que chame a função exportarDados
+    end
+    
+    function desativarLQR()
+        % Esta função só é útil se a coleta for feita em background (com um timer), 
+        % mas no seu modelo atual, a coleta roda no thread principal até o fim.
+        uialert(f, 'A desativação manual não é suportada neste modo de coleta síncrona.', 'Aviso');
+        statusLQR.Text = 'Use o botão de Desativar apenas se a coleta rodasse em background.';
+    end
+
     
     %closeFig;
 end

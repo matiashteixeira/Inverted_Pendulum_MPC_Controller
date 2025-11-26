@@ -35,13 +35,13 @@ x        = zeros(N+1, 4);
 E        = zeros(1, N+1);
 
 
-x(1,:) = [0 175*pi/180 0 0]; % Estado Inicial
+x(1,:) = [0 0*pi/180 0 0]; % Estado Inicial
 u_volt(1) = 0;
 u_force(1) = 0;
 t(1) = 0;
 E(1) = 0;
 
-x_des = [0; 180*pi/180; 0; 0];            % Estado desejado
+x_des = [-27/100; 180*pi/180; 0; 0];            % Estado desejado
 
 i = 1;
 sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
@@ -53,7 +53,7 @@ for k = 0:Ts:Tf
 
     % Aplicação de um distúrbio aos 20s
     if abs(k - 20) < Ts/2
-        estado_novo(4) = estado_novo(4) + 40*pi/180; 
+        estado_novo(4) = estado_novo(4) + 20*pi/180; 
     end
 
     x(i+1,:) = estado_novo';
@@ -61,7 +61,7 @@ for k = 0:Ts:Tf
     theta = estado_novo(2);
     theta_dot = estado_novo(4);
 
-    if (abs(theta - pi) < theta_switch) && (abs(theta_dot) < theta_dot_switch)
+    if (abs(theta-pi) < theta_switch) && (abs(theta_dot) < theta_dot_switch)
         u_volt(i+1) = -k_lqr * (estado_novo - x_des);
     else
         u_volt(i+1) = EnergySwingUpController(estado_novo, dados);
@@ -78,6 +78,7 @@ end
 
 simulacao.tempo = t;
 simulacao.angulo = wrapTo360( (180/pi).* x(:,2) );
+%simulacao.angulo = (180/pi).* x(:,2);
 simulacao.velocidade_pendulo = (180/pi).*x(:,4);
 simulacao.posicao = x(:,1).*100;
 simulacao.velocidade_carro = x(:,3).*100;
