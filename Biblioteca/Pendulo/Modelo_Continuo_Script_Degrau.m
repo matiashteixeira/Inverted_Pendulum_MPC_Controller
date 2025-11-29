@@ -1,4 +1,4 @@
-function vet_x_dot = Modelo_Continuo_Script(t, x, dados, t_pulso, amplitude_degrau)
+function vet_x_dot = Modelo_Continuo_Script_Degrau(t, x, dados, t_pulso, amplitude_degrau)
 
 if t < t_pulso
     u = amplitude_degrau;
