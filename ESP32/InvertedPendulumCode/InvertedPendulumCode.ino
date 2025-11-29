@@ -1,4 +1,13 @@
 // ==============================
+// INCLUSÃO DAS BIBLIOTECAS
+// ==============================
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#include <WiFi.h>
+
+// ==============================
 // CONFIGURAÇÃO DOS PINOS
 // ==============================
 #define ENCODER_PEND_A 33
@@ -11,75 +20,107 @@
 #define MOTOR_PWM1 27
 #define MOTOR_PWM2 26
 
-// ==============================
-// VARIÁVEIS GLOBAIS
-// ==============================
-const float PERIODO = 10.0;  // 10 ms = 100 Hz
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_ADDR 0x3C
 
-volatile long encoderPendCount = 0;
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// ==============================
+// CONFIGURAÇÃO DO WIFI
+// ==============================
+const char* ssid = "Gurin 2G";
+const char* senha = "DONAMARCIA123";
+
+
+// ==============================
+// VARIÁVEIS DE LEITURA DOS ENCODERS
+// ==============================
+
+// Resolução do encoder
+const int PULSOS_POR_REV_PEND = 600;  
+
+// PRECISA VERIFICAR SE PRECISA
+const int RESOLUCAO_PEND = PULSOS_POR_REV_PEND * 4;  // Quadratura 4x
+
+// Armazena a contagem de pulsos
+volatile long encoderPendCount = 0;     
 volatile long encoderMotCount = 0;
 
-int lastEncodedPend = 0;
-int lastEncodedMot = 0;
-
-const int PULSOS_POR_REV_PEND = 600;      
-const int PULSOS_POR_REV_MOT  = 16;
-
-const int RESOLUCAO_PEND = PULSOS_POR_REV_PEND * 4;  // Quadratura 4x
-const int RESOLUCAO_MOT  = PULSOS_POR_REV_MOT  * 4;  // Quadratura 4x
+// Armazena a última contagem de pulsos para permitir 
+volatile int lastEncodedPend = 0;
+volatile int lastEncodedMot = 0;
 
 const float FATOR_CONV_DIST = 145.366; //Pulsos pos cm
+
+
+// ==============================
+// VARIÁVEIS DOS SINAIS DE ENSAIO
+// ==============================
 
 // Variáveis do degrau
 volatile bool degrauAtivo = false;
 unsigned long tempoDegrauInicio = 0;
-unsigned long duracaoDegrau = 100; // 500 ms
+unsigned long duracaoDegrau = 100;    // ms
 uint8_t intensidadeDegrau = 0;
 char sentidoDegrau = 'R';
 
 // Variáveis do seno
 volatile bool senoideAtiva = false;
 unsigned long tempoSenoInicio = 0;
-float amplitudeSeno = 0;       // 0-255
-float frequenciaSeno = 0.5;          // Hz
-unsigned long duracaoSeno = 1000; // duração em ms
+float amplitudeSeno = 0.0;            // 0-255
+float frequenciaSeno = 0.5;           // Hz
+unsigned long duracaoSeno = 1000;     // ms
 
+// Variáveis de comando manual
 volatile char comandoManual = 'P';
 volatile uint8_t pwmManual = 180;
+
+
+// ==============================
+// VARIÁVEIS DO CONTROLE
+// ==============================
 
 // Variáveis do controlador
 volatile bool controleAtivo = false;
 float K[4] = {0, 0, 0, 0};
 float K_swing = 45;
-bool modoLQR = false;   // false = swing-up, true = LQR
 
 // Limiares de troca
-const float THETA_SWITCH = 20 * PI/180.0;       
-const float THETA_DOT_SWITCH = 120 * PI/180.0;  
+const float THETA_SWITCH = 12 * PI/180.0;       
+const float THETA_DOT_SWITCH = 15 * PI/180.0;  
+const float FIM_CURSO_VIRTUAL =  0.20; 
 
-// Energia desejada do pêndulo ereto
-const float m = 0.0205;       // use os seus valores!
-const float l = 0.18;
-const float g = 9.81;
-const float I = 0.000207;
-const float M = 0.3088;       // massa do carrinho (kg)
-const float b = 0.000008;       // atrito do pêndulo
-const float c = 6.0;       // atrito do carrinho
-const float kt = 0.175;
-const float kb = 0.04;
-const float Rm = 10.5;
-const float r  = 0.071;
+// Setpoint posição
+float set_point_x = 0.0;
 
-// Estados;
-float x = 0;
-float x_dot = 0;
-float theta = 0;
-float theta_dot = 0;
 
-float velPendFilt = 0, velMotFilt = 0;
+// ==============================
+// DADOS DA PLANTA
+// ==============================
+const float PERIODO = 10.0;  // ms
 
-float setpointPos = 0.0;
+const float m = 0.0205;       // Massa pêndulo
+const float l = 0.18;         // Distância até o centro de massa
+const float g = 9.81;         // Gravidade
+const float I = 0.000207;     // Momento de Inércia
+const float M = 0.3088;       // Massa carrinho
+const float b = 0.000008;     // Atrito viscoso do pêndulo
+const float c = 6.0;          // Atrito viscoso do carrinho
+const float kt = 0.175;       // Constante de torque do motor
+const float kb = 0.04;        // Constante de força eletromotriz
+const float Rm = 10.5;        // Resistência do motor
+const float r  = 0.071;       // Raio da polia
+const float guia = 30.0;      // Tamanho da guia (cm)
 
+
+// ==============================
+// ESTADOS DA PLANTA
+// ==============================
+float x = 0.0;          // Posição (m)
+float x_dot = 0.0;      // Velocidade do carro (m/s)
+float theta = 0.0;      // Ângulo (rad)
+float theta_dot = 0.0;  // Velocidade angular (rad/s)
 
 // ==============================
 // INTERRUPÇÕES DOS ENCODERS
@@ -98,6 +139,7 @@ void IRAM_ATTR updateEncoderPend() {
 
   lastEncodedPend = encoded;
 }
+
 
 void IRAM_ATTR updateEncoderMot() {
   int MSB = digitalRead(ENCODER_MOT_A);
@@ -120,7 +162,6 @@ void IRAM_ATTR updateEncoderMot() {
 // ==============================
 void aplicaDegrau() {
   if (degrauAtivo) {
-    // Define PWM de acordo com o sentido
     if (sentidoDegrau == 'R') {
       ledcWrite(0, intensidadeDegrau);  // MOTOR_PWM1
       ledcWrite(1, 0);                  // MOTOR_PWM2
@@ -129,9 +170,8 @@ void aplicaDegrau() {
       ledcWrite(1, intensidadeDegrau);  // MOTOR_PWM2
     }
 
-    // Verifica tempo decorrido
     if (millis() - tempoDegrauInicio >= duracaoDegrau) {
-      degrauAtivo = false;           // desliga degrau
+      degrauAtivo = false;           
       ledcWrite(0, 0);
       ledcWrite(1, 0);
     }
@@ -171,14 +211,13 @@ void aplicaSenoide() {
     int pwm = (int)(amplitudeSeno * abs(s));          // PWM sempre positivo
 
     if (s >= 0) {
-      ledcWrite(0, pwm);  // MOTOR_PWM1 frente
-      ledcWrite(1, 0);    // MOTOR_PWM2 desligado
+      ledcWrite(0, pwm);  // MOTOR_PWM1 
+      ledcWrite(1, 0);    // MOTOR_PWM2 
     } else {
-      ledcWrite(0, 0);    // MOTOR_PWM1 desligado
-      ledcWrite(1, pwm);  // MOTOR_PWM2 trás
+      ledcWrite(0, 0);    // MOTOR_PWM1 
+      ledcWrite(1, pwm);  // MOTOR_PWM2 
     }
 
-    // verifica se o tempo acabou
     if (millis() - tempoSenoInicio >= duracaoSeno) {
       senoideAtiva = false;
       ledcWrite(0, 0);
@@ -191,10 +230,10 @@ void aplicaSenoide() {
   }
 }
 
+
 // ==============================
 // CONTROLADOR POR SWING UP
 // ==============================
-
 float sign(float x_cop) {
     if (x_cop > 0) return 1.0;
     else if (x_cop < 0) return -1.0;
@@ -214,7 +253,7 @@ float swingUpController() {
 
     float k_energy = K_swing * g;
 
-    float x_2dot_desejado = k_energy * (E - E_des) * sign(arg) - 2*x;
+    float x_2dot_desejado = k_energy * (E - E_des) * sign(arg) - 8*x;
     
     float theta_2dot = (-b * theta_dot
                         - m * l * cos(theta) * x_2dot_desejado
@@ -236,22 +275,25 @@ float swingUpController() {
 // ==============================
 void controleEstado() {
 
-  float erroX = x - (setpointPos / 100.0f);  // converte cm → metros, se sua pos está em m
+  float erroX = x - (set_point_x / 100.0f);  // converte cm → metros, se sua pos está em m
   float erroTheta = theta - PI; 
 
   float u = 0;
 
-  if ((abs(erroTheta) < THETA_SWITCH) && (abs(theta_dot) < THETA_DOT_SWITCH)){
+  bool emZonaPerigo = abs(x) > FIM_CURSO_VIRTUAL;
+  bool emRegiaoLQR = (abs(erroTheta) < THETA_SWITCH) && (abs(theta_dot) < THETA_DOT_SWITCH);
+
+  if (emZonaPerigo){
+    u = - K[3] * erroX;
+  }else if(emRegiaoLQR){
     u = -(K[0]*erroX + K[1]*erroTheta + K[2]*x_dot + K[3]*theta_dot);
   }else{
     u = swingUpController();
   }
 
-  float umax = 12.0;
-  u = constrain(u, -umax, umax);
-  float u_pwm = (u / umax) * 255.0;
+  u = constrain(u, -12.0, 12.0);
+  float u_pwm = (u / 12.0) * 255.0;
   
-  // Aplica o controle ao motor
   if (u_pwm >= 0) {
     ledcWrite(0, (int)u_pwm);
     ledcWrite(1, 0);
@@ -261,6 +303,7 @@ void controleEstado() {
   }
 }
 
+
 // ==============================
 // TAREFA DE AMOSTRAGEM (10 ms)
 // ==============================
@@ -269,8 +312,9 @@ void taskLeitura(void *parameter) {
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   // Variáveis auxiliares para cálculo de velocidade
-  float theta_ant = 0;
-  float pos_ant  = 0;
+  float theta_ant = 0.0;
+  float x_ant  = 0.0;
+  float tempo_s = 0.0;
 
   while (true) {
     vTaskDelayUntil(&xLastWakeTime, periodo);
@@ -285,51 +329,43 @@ void taskLeitura(void *parameter) {
       controleManual();
     }
 
-    float tempo_s = millis() / 1000.0;
+    tempo_s = millis() / 1000.0;
 
     // Cópias locais (evita conflito com interrupções)
     long countMot = encoderMotCount;
     long countPend = encoderPendCount;
 
-    x = (float)countMot / (FATOR_CONV_DIST * 100.0f);
-    x_dot = (x - pos_ant) / (PERIODO / 1000.0);
-    pos_ant  = x;
+    // Cálculo da posição em metros e da velocidade em m/s
+    x = (float) countMot / (FATOR_CONV_DIST * 100.0f);
+    x_dot = (x - x_ant) / (PERIODO / 1000.0);
+    x_ant = x;
 
-    // theta = ((countPend % RESOLUCAO_PEND) * 2*PI) / RESOLUCAO_PEND;
-    // if (theta >  PI) theta -= 2*PI;
-    // if (theta < -PI) theta += 2*PI;
+    // Cálculo do ângulo entre 0 e 2π
+    long theta_bruto = countPend % RESOLUCAO_PEND;
+    if (theta_bruto < 0) theta_bruto += RESOLUCAO_PEND;  // Garante faixa positiva
+    theta = (theta_bruto * 2 * PI) / RESOLUCAO_PEND;  // 0 a 2π
 
-    // theta_dot = (theta - theta_ant) / (PERIODO / 1000.0);
-    // theta_ant = theta;
-
-    // Ângulo entre 0 e 2π
-    long idx = countPend % RESOLUCAO_PEND;
-    if (idx < 0) idx += RESOLUCAO_PEND;  // garante faixa positiva
-
-    theta = (idx * 2*PI) / RESOLUCAO_PEND;  // 0 a 2π
-
-    // Cálculo correto da velocidade angular (trata salto 2π → 0)
-    float theta_raw = theta - theta_ant;
+    // Cálculo da velocidade angular (trata salto 2π → 0)
+    float delta_theta = theta - theta_ant;
 
     // Se houve passagem pelo zero:
-    if (theta_raw > PI)       theta_raw -= 2*PI;
-    else if (theta_raw < -PI) theta_raw += 2*PI;
+    if (delta_theta > PI)       delta_theta -= 2*PI;
+    else if (delta_theta < -PI) delta_theta += 2*PI;
 
-    theta_dot = theta_raw / (PERIODO / 1000.0);
-
+    theta_dot = delta_theta / (PERIODO / 1000.0) ;
     theta_ant = theta;
 
+    // Leitura do potênciometro para definição do set point da posição
     int leituraPot = analogRead(POTENCIOMETRO);
-    setpointPos = ((float)leituraPot / 4095.0f) * 60.0f - 30.0f;
+    set_point_x = ((float)leituraPot / 4095.0f) * guia - guia/2.0;
 
-    //Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x, x_dot);
+    //Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x*100, x_dot*100);
   }
 }
 
 // ==============================
 // VERIFICA COMANDOS VIA SERIAL
 // ==============================
-// ===========================================
 void taskSerial(void *parameter) {
     String buffer = "";
     while (true) {
@@ -362,10 +398,6 @@ void taskSerial(void *parameter) {
                             String v = buffer.substring(idx2 + 1, idx3);
                             String s = buffer.substring(idx3 + 1);
 
-                            // Note: A comparação de sentidoDegrau deve ser robusta, 
-                            // assumindo que a string 's' pode ter espaços/terminadores
-                            // remanescentes no original. Aqui, mantive a lógica original, 
-                            // mas o ideal seria limpar 's' antes.
                             s.toUpperCase(); // Garante 'L' ou 'R' maiúsculo
                             
                             duracaoDegrau = t.toInt();
@@ -419,6 +451,10 @@ void taskSerial(void *parameter) {
                             controleAtivo = true;
                             degrauAtivo = false;
                             senoideAtiva = false;
+
+                            if(theta == 0){
+                              ledcWrite(1, 200);
+                            }
                         }
                     }
 
@@ -463,11 +499,115 @@ void taskSerial(void *parameter) {
     }
 }
 
+// ======================================================================
+// TAREFA DE ATUALIZAÇÃO DO DISPLAY OLED (LENTA)
+// ======================================================================
+void taskDisplay(void *parameter) {
+    const TickType_t displayPeriodo = pdMS_TO_TICKS(100); // 100ms (10Hz)
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    while (true) {
+        vTaskDelayUntil(&xLastWakeTime, displayPeriodo);
+
+        atualizarDisplay();
+    }
+}
+
+// ======================================================================
+//  DISPLAY OLED
+// ======================================================================
+void telaBoasVindas() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(20, 8);
+  display.println("Projeto");
+
+  display.setCursor(10, 22);
+  display.println("Lab Integrador");
+
+  display.setCursor(0, 48);
+  display.println("Inicializando...");
+
+  display.display();
+  delay(2500);
+}
+
+void telaCalibrandoPendulo() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 8);
+  display.println("Calibrando pendulo...");
+  display.setCursor(0, 28);
+  display.println("Deixe em repouso");
+
+  display.display();
+}
+
+void atualizarDisplay() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // ----- Titulo centralizado -----
+  display.setTextSize(1);
+  const char titulo[] = "Projeto LabIntegrador";
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(titulo, 0, 0, &x1, &y1, &w, &h);
+  int16_t xTitulo = (SCREEN_WIDTH - w) / 2;
+  display.setCursor(xTitulo, 0);
+  display.print(titulo);
+
+  // Linha separadora
+  display.drawLine(0, 10, SCREEN_WIDTH - 1, 10, SSD1306_WHITE);
+
+  // ----- Bloco MOTOR -----
+  display.setTextSize(1);
+  display.setCursor(0, 14);
+  display.print("Posição");
+
+  display.setTextSize(2);
+  display.setCursor(50, 24);
+  display.print(x*100, 1);
+
+  display.setTextSize(1);
+  display.setCursor(0, 30);
+  display.print("cm");
+
+  display.drawLine(0, 42, SCREEN_WIDTH - 1, 42, SSD1306_WHITE);
+
+  // ----- Bloco PENDULO -----
+  display.setTextSize(1);
+  display.setCursor(0, 46);
+  display.print("Set Point");
+
+  display.setTextSize(2);
+  display.setCursor(50, 52 - 8);
+  display.print(set_point_x, 1);
+
+  display.setTextSize(1);
+  display.setCursor(0, 62 - 4);
+  display.print("deg");
+
+  display.display();
+}
+
 // ==============================
 // CONFIGURAÇÃO INICIAL
 // ==============================
 void setup() {
   Serial.begin(115200);
+  Wire.begin(21, 22);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("Falha ao iniciar display!");
+  }
+
+  telaBoasVindas();
+
 
   pinMode(ENCODER_PEND_A, INPUT);
   pinMode(ENCODER_PEND_B, INPUT);
@@ -478,17 +618,13 @@ void setup() {
   pinMode(POTENCIOMETRO, INPUT);
 
 
-  // PWM MOTOR 1
-  ledcSetup(0, 7500, 8);        // canal 0, 1kHz, 8 bits
+  // PWM MOTOR - Esquerda
+  ledcSetup(0, 10000, 8);        // Canal 0, 10kHz, 8 bits
   ledcAttachPin(MOTOR_PWM1, 0);
 
-  // PWM MOTOR 2
-  ledcSetup(1, 7500, 8);        // canal 1, 1kHz, 8 bits
+  // PWM MOTOR - Direita
+  ledcSetup(1, 10000, 8);        // Canal 1, 10kHz, 8 bits
   ledcAttachPin(MOTOR_PWM2, 1);
-
-  // Leitura inicial
-  //lastEncodedPend = (digitalRead(ENCODER_PEND_A) << 1) | digitalRead(ENCODER_PEND_B);
-  //lastEncodedMot  = (digitalRead(ENCODER_MOT_A)  << 1) | digitalRead(ENCODER_MOT_B);
 
   // Interrupções
   attachInterrupt(digitalPinToInterrupt(ENCODER_PEND_A), updateEncoderPend, CHANGE);
@@ -499,9 +635,9 @@ void setup() {
   // Cria tarefa FreeRTOS
   xTaskCreatePinnedToCore(taskLeitura, "TaskLeitura", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(taskSerial,   "TaskSerial",  2048, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(taskDisplay, "TaskDisplay", 4096, NULL, 1, NULL, 0);
 
 }
 
 void loop() {
-  // Loop vazio
 }
