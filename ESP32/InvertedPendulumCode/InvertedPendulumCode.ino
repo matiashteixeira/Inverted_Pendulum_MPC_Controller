@@ -550,13 +550,7 @@ void taskSerial(void *parameter) {
                             K[3] = buffer.substring(idx4 + 1, idx5).toFloat();
                             K_swing = buffer.substring(idx5 + 1).toFloat();
 
-                            controleAtivo = true;
-                            degrauAtivo = false;
-                            senoideAtiva = false;
-
-                            if(theta == 0){
-                              ledcWrite(1, 200);
-                            }
+                            ativaControladorLQR();
                         }
                     }
 
