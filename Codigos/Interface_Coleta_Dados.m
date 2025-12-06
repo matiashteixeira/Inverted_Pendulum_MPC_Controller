@@ -550,88 +550,87 @@ end
         % Formato: Q,K1,K2,K3,K4,Kswing
         comando = sprintf('Q,%s,%s,%s,%s,%s\n', K1, K2, K3, K4, Kswing);
         writeline(sLQR, comando);
-        pause(0.05);
+        %pause(0.05);
         
         % 3. Inicia o loop de coleta de dados (similar a iniciarColeta)
-        periodo = 10/1000; % 10ms
-        t_inicio = tic;
-    
-        tam_estimado = ceil(tempo_total/periodo) + 100;
-        tempo = zeros(1,tam_estimado);
-        theta = zeros(1,tam_estimado);
-        theta_dot = zeros(1,tam_estimado);
-        pos = zeros(1,tam_estimado);
-        pos_dot = zeros(1,tam_estimado);
-        i = 1;
-    
-        statusLQR.Text = 'Controlador Ativo! Coletando dados ';
-        drawnow;
+        % periodo = 10/1000; % 10ms
+        % t_inicio = tic;
+        % 
+        % tam_estimado = ceil(tempo_total/periodo) + 100;
+        % tempo = zeros(1,tam_estimado);
+        % theta = zeros(1,tam_estimado);
+        % theta_dot = zeros(1,tam_estimado);
+        % pos = zeros(1,tam_estimado);
+        % pos_dot = zeros(1,tam_estimado);
+        % i = 1;
+        % 
+        % statusLQR.Text = 'Controlador Ativo! Coletando dados ';
+        % drawnow;
+        % 
+        % % Loop de coleta
+        % while toc(t_inicio) < tempo_total
+        %     if sLQR.NumBytesAvailable > 0
+        %         raw_data = readline(sLQR);
+        %         valores = strsplit(strtrim(raw_data),';');
+        %         if length(valores) == 5
+        %             tempo(i)  = str2double(valores{1});
+        %             theta(i)  = str2double(valores{2});
+        %             theta_dot(i)  = str2double(valores{3});
+        %             pos(i)    = str2double(valores{4});
+        %             pos_dot(i) = str2double(valores{5});
+        %             i = i + 1;
+        %         end
+        %     end
+        %     if i > tam_estimado
+        %         % Expande o vetor se necessário
+        %         tam_estimado = tam_estimado + 5000;
+        %         tempo = [tempo zeros(1,5000)];
+        %         theta = [theta zeros(1,5000)];
+        %         theta_dot = [theta_dot zeros(1,5000)];
+        %         pos = [pos zeros(1,5000)];
+        %         pos_dot = [pos_dot zeros(1,5000)];
+        %     end
+        % end
+        % 
+        % % 4. Encerra a coleta e plota os resultados
+        % 
+        % % Envia o comando 'X' para desativar o controlador no ESP32 antes de fechar
+        % writeline(sLQR, 'X\n'); 
+        % pause(0.1); 
         
-        % Loop de coleta
-        while toc(t_inicio) < tempo_total
-            if sLQR.NumBytesAvailable > 0
-                raw_data = readline(sLQR);
-                valores = strsplit(strtrim(raw_data),';');
-                if length(valores) == 5
-                    tempo(i)  = str2double(valores{1});
-                    theta(i)  = str2double(valores{2});
-                    theta_dot(i)  = str2double(valores{3});
-                    pos(i)    = str2double(valores{4});
-                    pos_dot(i) = str2double(valores{5});
-                    i = i + 1;
-                end
-            end
-            if i > tam_estimado
-                % Expande o vetor se necessário
-                tam_estimado = tam_estimado + 5000;
-                tempo = [tempo zeros(1,5000)];
-                theta = [theta zeros(1,5000)];
-                theta_dot = [theta_dot zeros(1,5000)];
-                pos = [pos zeros(1,5000)];
-                pos_dot = [pos_dot zeros(1,5000)];
-            end
-        end
-    
-        % 4. Encerra a coleta e plota os resultados
-        
-        % Envia o comando 'X' para desativar o controlador no ESP32 antes de fechar
-        writeline(sLQR, 'X\n'); 
-        pause(0.1); 
-        
-        clear sLQR; % Fecha serial
+        %clear sLQR; % Fecha serial
     
         % Ajusta vetores ao tamanho real
-        tempo = tempo(1:i-1);
-        theta = theta(1:i-1);
-        theta_dot = theta_dot(1:i-1);
-        pos = pos(1:i-1);
-        pos_dot = pos_dot(1:i-1);
-    
-        % Salva globalmente (opcional, mas bom para exportar)
-        dados = [tempo' theta' theta_dot' pos' pos_dot'];
-        
-        % Plota os dados (similar a iniciarColeta)
-        f2 = figure('Name','Resposta do Controlador LQR','Position',[600 100 800 500]);
-        tPlot = tiledlayout(2,2,'Padding','compact');
-        t_plot = tempo;
-    
-        ax1 = nexttile; plot(ax1,t_plot,pos); title('Posição Carro'); xlabel('t (s)'); grid on; ylabel('Pos (cm)');
-        ax2 = nexttile; plot(ax2,t_plot,pos_dot); title('Velocidade Carro'); xlabel('t (s)'); grid on; ylabel('Velocidade (cm/s)');
-        ax3 = nexttile; plot(ax3,t_plot,theta); title('Ângulo Pêndulo'); xlabel('t (s)'); grid on; ylabel('Ângulo (°)');
-        ax4 = nexttile; plot(ax4,t_plot,theta_dot); title('Velocidade Angular Pêndulo'); xlabel('t (s)'); grid on; ylabel('Velocidade Angular (°/s)');
-    
-        statusLQR.Text = 'Coleta e Controle Concluídos! Dados Plotados.';
-        
-        % Define o nome do arquivo para exportação
-        nome_arquivo = sprintf('dados_LQR_K1_%s_K2_%s_%s.csv', K1, K2, datestr(now,'HHMMSS'));
-        % Você precisará de um botão 'Exportar' na Aba 4 que chame a função exportarDados
+        % tempo = tempo(1:i-1);
+        % theta = theta(1:i-1);
+        % theta_dot = theta_dot(1:i-1);
+        % pos = pos(1:i-1);
+        % pos_dot = pos_dot(1:i-1);
+        % 
+        % % Salva globalmente (opcional, mas bom para exportar)
+        % dados = [tempo' theta' theta_dot' pos' pos_dot'];
+        % 
+        % % Plota os dados (similar a iniciarColeta)
+        % f2 = figure('Name','Resposta do Controlador LQR','Position',[600 100 800 500]);
+        % tPlot = tiledlayout(2,2,'Padding','compact');
+        % t_plot = tempo;
+        % 
+        % ax1 = nexttile; plot(ax1,t_plot,pos); title('Posição Carro'); xlabel('t (s)'); grid on; ylabel('Pos (cm)');
+        % ax2 = nexttile; plot(ax2,t_plot,pos_dot); title('Velocidade Carro'); xlabel('t (s)'); grid on; ylabel('Velocidade (cm/s)');
+        % ax3 = nexttile; plot(ax3,t_plot,theta); title('Ângulo Pêndulo'); xlabel('t (s)'); grid on; ylabel('Ângulo (°)');
+        % ax4 = nexttile; plot(ax4,t_plot,theta_dot); title('Velocidade Angular Pêndulo'); xlabel('t (s)'); grid on; ylabel('Velocidade Angular (°/s)');
+        % 
+        % statusLQR.Text = 'Coleta e Controle Concluídos! Dados Plotados.';
+        % 
+        % % Define o nome do arquivo para exportação
+        % nome_arquivo = sprintf('dados_LQR_K1_%s_K2_%s_%s.csv', K1, K2, datestr(now,'HHMMSS'));
+        % % Você precisará de um botão 'Exportar' na Aba 4 que chame a função exportarDados
     end
     
     function desativarLQR()
-        % Esta função só é útil se a coleta for feita em background (com um timer), 
+        writeline(sLQR, 'X\n');        
+        a% Esta função só é útil se a coleta for feita em background (com um timer), 
         % mas no seu modelo atual, a coleta roda no thread principal até o fim.
-        uialert(f, 'A desativação manual não é suportada neste modo de coleta síncrona.', 'Aviso');
-        statusLQR.Text = 'Use o botão de Desativar apenas se a coleta rodasse em background.';
     end
 
     

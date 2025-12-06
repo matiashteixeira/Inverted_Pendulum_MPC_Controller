@@ -1,7 +1,6 @@
 %% Controlador Preditivo Com Restrições
 
 run Codigos\P1_Modelo_Do_Sistema.m;
-
 close all;
 
 %% Variáveis gerais
@@ -11,44 +10,50 @@ B = dados.planta.B;
 tau = dados.geral.Ts; 
 
 %pos_limite = dados.geral.guia/2*0.8;
-pos_limite = 20/100;
-ang_limite = 5*(pi/180);
-comando_limite = 12;
+pos_limite = inf/100;
+ang_limite = inf*(pi/180);
+vel_limite = inf/100;
+vel_ang_limite = inf;
+comando_limite = inf;
 
-ang_inicial = 5*(pi/180);
-pos_inicial = 20/100;
+ang_inicial = 185*(pi/180);
+pos_inicial = 0/100;
 
 pos_spt = 0/100;
 
-tsim=30;
+tsim=10;
+
+qp_error_count = 0;
+QP_MAX_FAIL = 5;
 
 %% Variáveis do MPC
 
-[n,nu] = size(B); 
+[~,nu] = size(B); 
 
 MPC.A = A; 
 MPC.B = B;
 
 % Definição das variáveis rastreadas
-MPC.Cr = [1 0 0 0; 0 1 0 0]; 
+MPC.Cr = eye(4);
 
-MPC.Qy = [500 0; 0 1000];
-MPC.Qu = 0.001; 
-MPC.N = 40; 
+MPC.Qy = diag([250 100 1 1]);
+MPC.Qu = 0.01;
+MPC.N = 50; 
 
 % Definição das variáveis restringidas
-MPC.Cc = [1 0 0 0; 0 1 0 0];
+MPC.Cc = eye(4);
 
 % Definição das restrições
-MPC.ycmin = [-pos_limite; -ang_limite]; MPC.ycmax= [pos_limite; ang_limite]; 
+MPC.ycmin = [-pos_limite; -ang_limite; -vel_limite; -vel_ang_limite]; MPC.ycmax= [pos_limite; ang_limite; vel_limite; vel_ang_limite]; 
 MPC.umin = -comando_limite; MPC.umax = comando_limite; 
-MPC.ulast = 0; MPC.deltamin=-inf; MPC.deltamax=inf;
+MPC.ulast = 0; MPC.deltamin=-100000; MPC.deltamax=100000;
 
 % Cálculo das matrizes do MPC
 [MPC]=compute_MPC_Matrices(MPC);
 
 % Condições Iniciais
 x0=[pos_inicial;ang_inicial;0;0];
+u = 0;
 
 % Inicialização do lest e captura do tamanho dos vetores 
 lest=(0:tau:tsim)';
@@ -61,86 +66,181 @@ lesy=zeros(nt, num_var_reguladas);
 lesu=zeros(nt, 1);
 
 % Sinal de referência
-yref = zeros(length(lest)*num_var_reguladas,1);         
-yref(1:2:end) = pos_spt;  
+yref = zeros(length(lest)*num_var_reguladas,1); 
+yref(1:4:end) = pos_spt;  
+yref(2:4:end) = pi;  
 
 lesx(1,:)=x0';
 lesy(1,:) = MPC.Cr*lesx(1, :)'; 
+
+x_des = [0 180*pi/180 0 0];
 
 % Opções para o qpOASES e inicialização
 options_qpOASES = qpOASES_options('maxIter', 100000);
 QP = [];
 
-for i=1:nt-1
-    yref_pred=yref(i+1:i+MPC.N*num_var_reguladas);
+sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
+
+for i=1:nt-MPC.N
+
+    xplus = RK4_discrete(lesx(i,:),u,tau,dados);
 
 
-    % Aplicação de um distúrbio aos 20s
-    if abs(i - (nt-1)/2) < tau/2
-        lesx(i,4) = lesx(i,4) + 75*pi/180;
+    yref_pred=yref(i*num_var_reguladas + 1 : (i+MPC.N)*num_var_reguladas);
+
+    %if abs(i - (nt-1)/2) < tau/2
+    %    lesx(i,4) = lesx(i,4) + 80*pi/180;
+    %end
+    err = xplus-x_des;
+
+    F=MPC.F1*err'+MPC.F2*yref_pred;
+    Bineq=MPC.G1*xplus'+MPC.G2*MPC.ulast+MPC.G3; 
+
+    try
+        if i == 1 || isempty(QP)
+            [QP, utilde_opt, ~, exitflag, ~, ~] = qpOASES_sequence('i', MPC.H, F, MPC.Aineq, MPC.utildemin, MPC.utildemax, [], Bineq, options_qpOASES);
+        else
+            [utilde_opt, ~, exitflag, ~, ~] = qpOASES_sequence('h', QP, F, MPC.utildemin, MPC.utildemax, [], Bineq, options_qpOASES);
+        end
+
+        % Se não convergiu → conta erro
+        if exitflag ~= 0 || any(~isfinite(utilde_opt))
+            qp_error_count = qp_error_count + 1;
+        else
+            qp_error_count = 0;
+        end
+    
+    catch
+        qp_error_count = qp_error_count + 1;
     end
-
-    F=MPC.F1*lesx(i,:)'+MPC.F2*yref_pred;
-    Bineq=MPC.G1*lesx(i, :)'+MPC.G2*MPC.ulast+MPC.G3; 
-
-
-    if i == 1
-        % Passo 1: Inicialização e Cold Start ('i')
-        [QP, utilde_opt, ~, ~, ~] = qpOASES_sequence('i', MPC.H, F, MPC.Aineq, MPC.utildemin, MPC.utildemax, [], Bineq, options_qpOASES);
-    else
-        % Passo 2: Hot Start ('h') - reutiliza o QP e atualiza os parâmetros
-        [utilde_opt, ~, ~, ~] = qpOASES_sequence('h', QP, F, MPC.utildemin, MPC.utildemax, [], Bineq, options_qpOASES);
-    end
-
-
-    u=P_i(1, nu, MPC.N)*utilde_opt;
+    
+    %if qp_error_count >= QP_MAX_FAIL
+        % SwingUp
+    %    u = EnergySwingUpController(lesx(i,:)', dados);
+    %    u = sat(u,12,-12);
+    %else
+        % MPC
+        u=P_i(1, nu, MPC.N)*utilde_opt;
+    %end
+    
     lesu (i, :)=u'; 
     MPC.ulast=u;
-    xplus=MPC.A*lesx(i, :)'+MPC.B*u;
-    lesx(i+1, :)=xplus';
-    lesy(i+1, :)=MPC.Cr*xplus;
+    lesx(i+1, :)=xplus;
+    lesy(i+1, :)=MPC.Cr*xplus';
 
 end
 
+Nplot = nt - MPC.N;
+
+posicao = lesx(1:Nplot,1).*100;
+angulo = lesx(1:Nplot,2).*180/pi;
+velocidade = lesx(1:Nplot,3).*100;
+vel_angular = lesx(1:Nplot,4).*180/pi;
+comando = lesu(1:Nplot);
+tempo = lest(1:Nplot);
+
+pos_ref = yref(1:4:4*Nplot) * 100;      
+ang_ref = yref(2:4:4*Nplot) * 180/pi;   
+vel_ref = yref(3:4:4*Nplot) * 100;      
+vag_ref = yref(4:4:4*Nplot) * 180/pi; 
+
+clear A B Bineq err F i lest lesy lesx lesu MPC n nt nu num_var_reguladas Nplot options_qpOASES pos_inicial;
+clear ang_inicial pos_spt QP tau tsim u utilde_opt x0 x_des xplus yref yref_pred;
+
 %% Plot dos resultados
 
-subplot(2,2,1);
-stairs(lest,lesu); grid on;
-title('Comando (v)');
-xlabel("Tempo (s)");
+% ================== COMANDO (u) ==================
 
-pos_simulado = lesy(:,1).*100;
+figure;
+hold on; grid on;
 
-limitacao_superior = ones(nt, 1) * pos_limite;
-limitacao_inferior = ones(nt, 1) * -pos_limite;
+% Comando (linha contínua grossa e colorida)
+stairs(tempo, comando, 'LineWidth', 2.5, 'Color', [0 0.45 0.74]);  % azul
 
-subplot(2,2,2);
-plot(lest,pos_simulado,lest,yref(1:2:end).*100,lest,limitacao_superior.*100,'k',lest,limitacao_inferior.*100,'k'); grid on;
-title('Posição (cm)');
-xlabel("Tempo (s)");
-legend('Posição Simulada', 'Referência', 'Location', 'best');
-ylim([-25 25]);
+% Limites (pontilhado vermelho mais grosso)
+plot(tempo, comando_limite * ones(size(tempo)), 'r--', 'LineWidth', 2.5);
+plot(tempo, -comando_limite * ones(size(tempo)), 'r--', 'LineWidth', 2.5);
+
+title('Comando (V)');
+xlabel('Tempo (s)');
+ylabel('Tensão (V)');
+legend('Comando','Limite superior','Limite inferior','Location','best');
+
+% ================== POSIÇÃO ==================
+figure;
+hold on; grid on;
+
+plot(tempo, posicao, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
+plot(tempo, pos_ref,  '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13]) % referência (amarelo)
+
+plot(tempo,  pos_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+plot(tempo, -pos_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+
+title('Posição (cm)')
+xlabel('Tempo (s)')
+ylabel('Posição (cm)')
+legend('Posição','Referência','Limite Sup','Limite Inf','Location','best')
 
 
-% ang_simulado = lesy(:,2).*(180/pi);
-% 
-% subplot(2,2,3);
-% plot(lest,ang_simulado,lest,yref(2:2:end)); grid on;
-% title('Ângulo (°)');
 
-ang_simulado_desvio = lesy(:,2).*(180/pi); % Desvio em graus (Delta_theta)
-ang_simulado_abs = ang_simulado_desvio + 180; % Angulo Absoluto (theta_abs)
+% ================== ÂNGULO ==================
+figure;
+hold on; grid on;
 
-yref_ang_abs = ones(nt, 1) * 180;
+plot(tempo, angulo, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
+plot(tempo, ang_ref, '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13])
 
-limitacao_superior = ones(nt, 1) * ang_limite.*(180/pi) + 180;
-limitacao_inferior = ones(nt, 1) * -ang_limite.*(180/pi) + 180;
+plot(tempo,  180+ang_limite*180/pi * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+plot(tempo, 180-ang_limite*180/pi * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
 
-subplot(2,2,3);
-plot(lest, ang_simulado_abs, lest, yref_ang_abs, lest, limitacao_superior, 'k', lest, limitacao_inferior, 'k');
-xlabel("Tempo (s)");
-grid on;
-title('Ângulo (°)');
-legend('Ângulo Simulado (Absoluto)', 'Referência (180°)', 'Location', 'best');
-ylim([170 187]);
+title('Ângulo (°)')
+xlabel('Tempo (s)')
+ylabel('Ângulo (°)')
+legend('Ângulo','Referência','Limite Sup','Limite Inf','Location','best')
 
+
+
+% ================== VELOCIDADE ==================
+figure;
+hold on; grid on;
+
+plot(tempo, velocidade, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
+plot(tempo, vel_ref,    '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13])
+
+plot(tempo,  vel_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+plot(tempo, -vel_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+
+title('Velocidade (cm/s)')
+xlabel('Tempo (s)')
+ylabel('Velocidade (cm/s)')
+legend('Velocidade','Referência','Limite Sup','Limite Inf','Location','best')
+
+
+
+% ================== VELOCIDADE ANGULAR ==================
+figure;
+hold on; grid on;
+
+plot(tempo, vel_angular, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
+plot(tempo, vag_ref,     '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13])
+
+plot(tempo,  vel_ang_limite * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+plot(tempo, -vel_ang_limite * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
+
+title('Velocidade Angular (°/s)')
+xlabel('Tempo (s)')
+ylabel('Vel Angular (°/s)')
+legend('Vel. Angular','Referência','Limite Sup','Limite Inf','Location','best')
+
+clear ang_limite ang_ref angulo pos_limite comando comando_limite pos_ref posicao tempo vag_ref vel_ang_limite vel_angular vel_limite vel_ref velocidade;
+%%
+
+% print_cpp_matrix("H", MPC.H);
+% print_cpp_matrix("F1", MPC.F1);
+% print_cpp_matrix("F2", MPC.F2);
+% print_cpp_matrix("Aineq", MPC.Aineq);
+% print_cpp_matrix("G1", MPC.G1);
+% print_cpp_matrix("G2", MPC.G2);
+% print_cpp_matrix("G3", MPC.G3);
+% print_cpp_matrix("utildemin", MPC.utildemin);
+% print_cpp_matrix("utildemax", MPC.utildemax);

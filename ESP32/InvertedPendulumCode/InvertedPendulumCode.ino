@@ -20,6 +20,9 @@
 #define MOTOR_PWM1 27
 #define MOTOR_PWM2 26
 
+#define BOT_LIGA 4
+#define BOT_DESLIGA 15
+
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_ADDR 0x3C
@@ -359,6 +362,7 @@ void taskLeitura(void *parameter) {
     int leituraPot = analogRead(POTENCIOMETRO);
     set_point_x = ((float)leituraPot / 4095.0f) * guia - guia/2.0;
 
+    Serial.println(leituraPot);
     //Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x*100, x_dot*100);
   }
 }

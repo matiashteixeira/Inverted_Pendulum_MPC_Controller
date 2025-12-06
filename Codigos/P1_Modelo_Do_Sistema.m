@@ -9,13 +9,13 @@ clear; clc; %close all;
 % ==============================
 dados.geral.g = 9.81;          % [m/s^2] Aceleração da gravidade
 dados.geral.Ts = 10/1000;       % [s] Período de amostragem
-dados.geral.Tf = 40;            % [s] Tempo total da simulação
+dados.geral.Tf = 20;            % [s] Tempo total da simulação
 dados.geral.spt = 0;         % [cm] Posição desejada do carro
 dados.geral.angulo_troca = 5;         % [°] Ângulo para troca dos controladores
 dados.geral.guia = 0.60; % [m] Tamanho da guia linear
 
 % Condições Iniciais
-dados.geral.inicial.theta0 = 0;      % [°] Ângulo inicial
+dados.geral.inicial.theta0 = 5;      % [°] Ângulo inicial
 dados.geral.inicial.theta_dot0 = 0;   % [°/s] Velocidade angular inicial
 dados.geral.inicial.x0 = 0;           % [m] Posição inicial do carro
 dados.geral.inicial.x_dot0 = 0;       % [m/s] Velocidade inicial do carro
@@ -28,6 +28,7 @@ dados.pendulo.l = 0.18;        % [m]     Distância do ponto de fixação até o
 dados.pendulo.I = 0.000207;  % [kg·m^2] Momento de inércia da haste em relação ao centro
 dados.pendulo.b = 0.000008;   % [N·m·s] Coeficiente de amortecimento viscoso no eixo de fixação
 dados.pendulo.r_massa = 0.01; % [m] Raio da massa na ponta do pêndulo 
+dados.pendulo.E_des = 2*dados.pendulo.m*dados.geral.g*dados.pendulo.l; % [J] Energia Potencial Desejada do Pêndulo
 
 % ==============================
 % Dados do carro
@@ -108,16 +109,21 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % x(1,:) = x0;
 % 
 % % Modelo Discreto
-% % t = (0:tau:t_final)';
-% % u = zeros(size(t));
-% % u(t <= duracao_degrau) = amplitude_degrau;
-% % 
-% % 
-% % for k=1:length(t)-1
-% %     x(k+1,:) = RK4_discrete(x(k,:),u(k),tau,dados);
-% % end
+% t = (0:tau:t_final)';
+% u = zeros(size(t));
+% u(t <= duracao_degrau) = amplitude_degrau;
 % 
-% %Modelo Contínuo
+% 
+% for k=1:length(t)-1
+%     x(k+1,:) = RK4_discrete(x(k,:),u(k),tau,dados);
+% end
+% 
+% x(:, 1) = x(:, 1).*100;
+% x(:, 2) = x(:, 2).*((180)/pi);
+% x(:, 3) = x(:, 3).*100;
+% x(:, 4) = x(:, 4).*((180)/pi);
+% 
+% % Modelo Contínuo
 % tspan = [0 t_final];
 % 
 % [t2,x2] = ode45(@(t2,x2) Modelo_Continuo_Script_Degrau(t2, x2, dados, duracao_degrau, amplitude_degrau), tspan, x0);
@@ -169,7 +175,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % 
 % % 1. Posição do Carrinho (x)
 % subplot(2, 2, 1);
-% %stairs(t, x(:, 1).*100, 'b-');          
+% stairs(t, x(:, 1), 'b-');          
 % hold on;                                  
 % plot(t2, x2(:, 1), 'r--');
 % hold off;                                
@@ -181,7 +187,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % 
 % % 2. Ângulo do Pêndulo (theta)
 % subplot(2, 2, 2);
-% %stairs(t, x(:, 2), 'b-');
+% stairs(t, x(:, 2), 'b-');
 % hold on;
 % plot(t2, x2(:, 2), 'r--');
 % hold off;
@@ -193,7 +199,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % 
 % % 3. Velocidade do Carrinho (x_dot)
 % subplot(2, 2, 3);
-% %stairs(t, x(:, 3), 'b-');
+% stairs(t, x(:, 3), 'b-');
 % hold on;
 % plot(t2, x2(:, 3), 'r--');
 % hold off;
@@ -205,7 +211,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % 
 % % 4. Velocidade Angular do Pêndulo (theta_dot)
 % subplot(2, 2, 4);
-% %stairs(t, x(:, 4), 'b-');
+% stairs(t, x(:, 4), 'b-');
 % hold on;
 % plot(t2, x2(:, 4), 'r--');
 % hold off;
@@ -214,7 +220,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % ylabel('Velocidade Ang. (rad/s)');
 % legend('Discreto (RK4)', 'Contínuo (ode45)');
 % grid on;
-% 
+
 % % clear t t2 x x2 u;
 
 %% Plot dos Resultados Experimentais x Simulados
@@ -232,8 +238,8 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % % 1. Posição do Carrinho
 % subplot(2, 2, 1);
 % stairs(t_import, posicao_import); 
-% %hold on;                                  
-% %plot(t2, x2(:, 1)); 
+% hold on;                                  
+% plot(t2, x2(:, 1)); 
 % title('Posição do Carrinho');
 % xlabel('Tempo (s)');
 % ylabel('Posição (cm)');
@@ -243,8 +249,8 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % % 2. Ângulo do Pêndulo
 % subplot(2, 2, 2);
 % stairs(t_import, angulo_import);
-% %hold on;
-% %plot(t2, x2(:, 2));
+% hold on;
+% plot(t2, x2(:, 2));
 % title('Ângulo do Pêndulo');
 % xlabel('Tempo (s)');
 % ylabel('Ângulo (°)');
@@ -254,8 +260,8 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % % 3. Velocidade do Carrinho
 % subplot(2, 2, 3);
 % stairs(t_import, velocidade_import);
-% %hold on;
-% %plot(t2, x2(:, 3));
+% hold on;
+% plot(t2, x2(:, 3));
 % title('Velocidade do Carrinho');
 % xlabel('Tempo (s)');
 % ylabel('Velocidade (m/s)');
@@ -265,12 +271,12 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % % 4. Velocidade Angular do Pêndulo
 % subplot(2, 2, 4);
 % stairs(t_import, vel_angular_import);
-% %hold on;
-% %plot(t2, x2(:, 4));
+% hold on;
+% plot(t2, x2(:, 4));
 % title('Velocidade Angular');
 % xlabel('Tempo (s)');
 % ylabel('Velocidade Ang. (°/s)');
 % %legend('Dados Experimentais','Dados Simulados');
 % grid on;
-% 
+
 % %clear angulo_import fat_conv_ang fat_conv_pos importados posicao_import t_import vel_angular_import velocidade_import x_import;

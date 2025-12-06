@@ -1,51 +1,66 @@
 %% Controlador Preditivo Sem Restrições
 
+run Codigos\P1_Modelo_Do_Sistema.m;
+close all;
+
 A = dados.planta.A;
 B = dados.planta.B;
 tau = dados.geral.Ts;
 
+
 [n,nu]=size(B);
 MPC.A = A; MPC.B = B;
-MPC.Cr=[1 0 0 0
-        0 1 0 0];
-MPC.Qy=[1 0; 0 1];
-MPC.Qu=100;
-MPC.N=20;
+MPC.Cr=eye(4);
+MPC.Qy=diag([250 100 1 1]);
+MPC.Qu=0.01;
+MPC.N=105;
 
 %--------------------------------------------
 [H,F1,F2,~]=compute_cost_matrices(MPC);
-%KN=-P_i(1,nu,MPC.N)*(H\F1);
-KN=[7.3539 -113.2320   59.0265  -17.2086];
+KN=P_i(1,nu,MPC.N)*(H\F1);
 GN=-P_i(1,nu,MPC.N)*(H\F2);
 %--------------------------------------------
-x0=[0;dados.geral.inicial.theta0*pi/180;dados.geral.inicial.x_dot0;dados.geral.inicial.theta_dot0];
-tsim=30;
+x0=[0;185*pi/180;0;0];
+tsim=10;
 lest=(0:tau:tsim)'; nt= size(lest,1);
 lesx=zeros(nt,length(B)); lesy=zeros(nt,size(MPC.Cr,1)); lesu=zeros(nt,1);
 
-    yref = zeros(length(lest)*2,1);             % inicializa vetor coluna
-    yref(1:2:end) = dados.geral.spt/100;  % índices ímpares
-    yref(2:2:end) = pi;                   % índices pares
+yref = zeros(length(lest)*size(MPC.Cr,1),1);             % inicializa vetor coluna
+yref(1:4:end) = 0/100;  % índices ímpares
+yref(2:4:end) = pi;                   % índices pares
 
 lesx(1,:) = x0';
 lesy(1,:)=(MPC.Cr*lesx(1,:)')';
 
+x_des = [0 180*pi/180 0 0];
+u = 0;
+
+sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
 
 for i=1:nt-MPC.N
-    yref_pred=yref(i+1:i+MPC.N*size(MPC.Cr,1));
-    u=KN*lesx(i,:)'+GN*yref_pred;
+    
+    xplus = RK4_discrete(lesx(i,:),u,tau,dados);
+
+    yref_pred=yref(i*size(MPC.Cr,1) + 1 : (i+MPC.N)*size(MPC.Cr,1));
+    
+    err = xplus-x_des;
+    u=-KN*err';+GN*yref_pred;
+    u = sat(u,12,-12);
     lesu(i,:)=u';
-    xplus=MPC.A*lesx(i,:)'+MPC.B*u;
-    lesx(i+1,:)=xplus';
-    lesy(i+1,:)=MPC.Cr*xplus;
+    
+
+    lesx(i+1,:)=xplus;
+    lesy(i+1,:)=MPC.Cr*xplus';
 end
 
 controlador.MPC = MPC;
 
-posicao = lesx(:,1).*100;
-angulo = lesx(:,2).*180/pi;
-velocidade = lesx(:,3).*100;
-vel_angular = lesx(:,4).*180/pi;
+posicao = lesx(1:nt-MPC.N,1).*100;
+angulo = lesx(1:nt-MPC.N,2).*180/pi;
+velocidade = lesx(1:nt-MPC.N,3).*100;
+vel_angular = lesx(1:nt-MPC.N,4).*180/pi;
+lest = lest(1:nt-MPC.N);
+lesu = lesu(1:nt-MPC.N);
 
 %% Plot dos resultados
 
@@ -61,6 +76,7 @@ title('Posição do Carrinho');
 xlabel('Tempo (s)');
 ylabel('Posição (cm)');
 grid on;
+ylim([-30 30]);
 
 % 2. Ângulo do Pêndulo
 subplot(2, 2, 2);
@@ -77,6 +93,7 @@ title('Velocidade do Carrinho');
 xlabel('Tempo (s)');
 ylabel('Velocidade (cm/s)');
 grid on;
+ylim([-50 50]);
 
 % 4. Velocidade Angular do Pêndulo
 subplot(2, 2, 4);
@@ -85,5 +102,6 @@ title('Velocidade Angular');
 xlabel('Tempo (s)');
 ylabel('Velocidade Ang. (°/s)');
 grid on;
+ylim([-70 70]);
 
 %clear A B F1 F2 F3 GN H i KN lest lesu lesx lesy MPC n nt nu tau tsim var_rastreadas x0 yref yref_pred;

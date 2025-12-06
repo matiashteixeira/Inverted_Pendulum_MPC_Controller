@@ -1,19 +1,12 @@
 %% Controlador LQR Discreto
 clc; 
 
-% [Q_opt, R_opt] = optimize_LQR(dados);
-% 
-% controlador.lqr.Q = Q_opt;
-% controlador.lqr.R = R_opt;
-% controlador.lqr.K = dlqr(dados.planta.A, dados.planta.B, Q_opt, R_opt);
-% 
-% disp("Q otimizado = "); disp(Q_opt);
-% disp("R otimizado = "); disp(R_opt);
+run Codigos\P1_Modelo_Do_Sistema.m;
 
 %%
 
 % Definição das matrizes de ponderamento do LQR
-controlador.lqr.Q = diag([1 5 1 1]);controlador.lqr.R = 0.001;
+controlador.lqr.Q = diag([250 100 1 1]);controlador.lqr.R = 0.01;
 controlador.lqr.K = dlqr(dados.planta.A,dados.planta.B,controlador.lqr.Q,controlador.lqr.R);
 
 %% Simulação em malha fechada
@@ -21,7 +14,7 @@ controlador.lqr.K = dlqr(dados.planta.A,dados.planta.B,controlador.lqr.Q,control
 Ts = dados.geral.Ts; % Período de Amostragem
 Tf = dados.geral.Tf; % Tempo final da simulação
 
-x(1,:) = [0 175*pi/180 0 0]; % Estado Inicial
+x(1,:) = [0 185*pi/180 0 0]; % Estado Inicial
 u_volt(1) = 0;
 u_force(1) = 0;
 t(1) = 0;

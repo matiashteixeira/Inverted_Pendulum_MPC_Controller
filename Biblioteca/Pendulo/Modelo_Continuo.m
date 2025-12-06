@@ -23,7 +23,10 @@ theta_dot = x(4);
 
 % Para reduzir o número de termos, utilizou-se a Força (N) como sinal de
 % controle
+
+
 F = Volt2Force(u, x_dot, dados.motor);
+
 
 alpha_a = ((m^2)*(l^2)*((sin(theta))^2)+ M*m*l^2 +(M+m)*I);
 
