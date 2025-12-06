@@ -91,7 +91,7 @@ float K_swing = 45;
 
 // Limiares de troca
 const float THETA_SWITCH = 12 * PI/180.0;       
-const float THETA_DOT_SWITCH = 15 * PI/180.0;  
+const float THETA_DOT_SWITCH = 100 * PI/180.0;  
 const float FIM_CURSO_VIRTUAL =  0.20; 
 
 // Setpoint posição
@@ -317,14 +317,6 @@ void ativaControladorLQR(){
   degrauAtivo = false;
   senoideAtiva = false;
 
-  if(ajustou){
-      encoderPendCount = 0;
-      encoderMotCount = 0;
-      lastEncodedPend = 0;
-      lastEncodedMot = 0;
-      ajustou = false;
-  }
-
   if (theta == 0) {
     ledcWrite(1, 200);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -383,7 +375,7 @@ void gerenciaBotoes(){
                 ativaAjustePosInicial(); // <<< CHAMA A FUNÇÃO DE ATIVAÇÃO
             } else {
                 // Se apenas LIGA for pressionado: ATIVA LQR
-                K[0] = -15; K[1] = 170; K[2] = -80; K[3] = 32; K_swing = 25;
+                K[0] = -15; K[1] = 140; K[2] = -80; K[3] = 20; K_swing = 25;
                 ativaControladorLQR();
             }
             lastButtonTime = millis();
@@ -393,6 +385,14 @@ void gerenciaBotoes(){
                 degrauAtivo = false;
                 senoideAtiva = false;
                 ajustandoPosicao = false; // <<< DESATIVA O NOVO ESTADO
+
+                  if(ajustou){
+                      encoderPendCount = 0;
+                      encoderMotCount = 0;
+                      lastEncodedPend = 0;
+                      lastEncodedMot = 0;
+                      ajustou = false;
+                  }
                 ledcWrite(0, 0);
                 ledcWrite(1, 0);
                 lastButtonTime = millis();
@@ -461,7 +461,7 @@ void taskLeitura(void *parameter) {
     int leituraPot = analogRead(POTENCIOMETRO);
     set_point_x = ((float)leituraPot / 4095.0f) * guia - guia/2.0;
 
-    Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x*100, x_dot*100);
+    //Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x*100, x_dot*100);
   }
 }
 
