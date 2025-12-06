@@ -11,9 +11,9 @@
 // CONFIGURAÇÃO DOS PINOS
 // ==============================
 #define ENCODER_PEND_A 33
-#define ENCODER_PEND_B 32
-#define ENCODER_MOT_A 13
-#define ENCODER_MOT_B 14
+#define ENCODER_PEND_B 25
+#define ENCODER_MOT_A 14
+#define ENCODER_MOT_B 13
 
 #define POTENCIOMETRO 34
 
@@ -125,6 +125,11 @@ float x_dot = 0.0;      // Velocidade do carro (m/s)
 float theta = 0.0;      // Ângulo (rad)
 float theta_dot = 0.0;  // Velocidade angular (rad/s)
 
+unsigned long lastButtonTime = 0;
+const unsigned long buttonDebounce = 1000;
+volatile bool ajustandoPosicao = false; 
+volatile bool ajustou = false;
+
 // ==============================
 // INTERRUPÇÕES DOS ENCODERS
 // ==============================
@@ -197,7 +202,7 @@ void controleManual() {
     ledcWrite(0, pwmManual);
     ledcWrite(1, 0);
   }
-  else {
+  else if (comandoManual == 'P'){
     ledcWrite(0, 0);
     ledcWrite(1, 0);
   }
@@ -306,6 +311,96 @@ void controleEstado() {
   }
 }
 
+void ativaControladorLQR(){
+
+  controleAtivo = true;
+  degrauAtivo = false;
+  senoideAtiva = false;
+
+  if(ajustou){
+      encoderPendCount = 0;
+      encoderMotCount = 0;
+      lastEncodedPend = 0;
+      lastEncodedMot = 0;
+      ajustou = false;
+  }
+
+  if (theta == 0) {
+    ledcWrite(1, 200);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    ledcWrite(1, 0);
+  }
+
+}
+
+void ajustaPosInicial() {
+    // Esta função AGORA apenas calcula e aplica o PWM,
+    // mas só é chamada se 'ajustandoPosicao' for TRUE (veja 'taskLeitura' modificada).
+
+    int leitura = analogRead(POTENCIOMETRO);
+    const int centro = 2048;
+    const int zonaMorta = 150;
+    int erro = leitura - centro;
+
+    if (abs(erro) < zonaMorta) {
+        ledcWrite(0, 0);
+        ledcWrite(1, 0);
+        ajustandoPosicao = false; // Desliga quando atinge o centro
+        return;
+    }
+
+    float Kp = 0.1;
+    int velocidade = abs(erro) * Kp;
+    velocidade = constrain(velocidade, 0, 255);
+
+    if (erro < 0) {
+        ledcWrite(1, 0);
+        ledcWrite(0, velocidade); // Vai para a DIREITA
+    } else {
+        ledcWrite(0, 0);
+        ledcWrite(1, velocidade); // Vai para a ESQUERDA
+    }
+
+    Serial.println(velocidade);
+    // Remove 'ajustou = true;' daqui.
+}
+
+void ativaAjustePosInicial() {
+    controleAtivo = false;
+    degrauAtivo = false;
+    senoideAtiva = false;
+    comandoManual = 'P'; // Para qualquer comando manual
+
+    ajustandoPosicao = true; // ATIVA O NOVO ESTADO
+    ajustou = true;          // Mantém sua flag para zerar o encoder
+}
+
+void gerenciaBotoes(){
+    if (millis() - lastButtonTime > buttonDebounce) {
+        if (digitalRead(BOT_LIGA)) {
+            delay(500);
+            if (digitalRead(BOT_DESLIGA)) {
+                ativaAjustePosInicial(); // <<< CHAMA A FUNÇÃO DE ATIVAÇÃO
+            } else {
+                // Se apenas LIGA for pressionado: ATIVA LQR
+                K[0] = -15; K[1] = 170; K[2] = -80; K[3] = 32; K_swing = 25;
+                ativaControladorLQR();
+            }
+            lastButtonTime = millis();
+        } else {
+            if (digitalRead(BOT_DESLIGA)) {
+                controleAtivo = false;
+                degrauAtivo = false;
+                senoideAtiva = false;
+                ajustandoPosicao = false; // <<< DESATIVA O NOVO ESTADO
+                ledcWrite(0, 0);
+                ledcWrite(1, 0);
+                lastButtonTime = millis();
+            }
+        }
+    }
+}
+
 
 // ==============================
 // TAREFA DE AMOSTRAGEM (10 ms)
@@ -322,15 +417,19 @@ void taskLeitura(void *parameter) {
   while (true) {
     vTaskDelayUntil(&xLastWakeTime, periodo);
 
-    if(controleAtivo){
-      controleEstado();
+    if(ajustandoPosicao){ // <<< PRIORIDADE MÁXIMA PARA O AJUSTE
+        ajustaPosInicial();
+    } else if(controleAtivo){
+        controleEstado();
     } else if(degrauAtivo){
-      aplicaDegrau();
+        aplicaDegrau();
     } else if(senoideAtiva){
-      aplicaSenoide();
+        aplicaSenoide();
     } else {
-      controleManual();
+        controleManual();
     }
+
+        gerenciaBotoes();
 
     tempo_s = millis() / 1000.0;
 
@@ -362,8 +461,7 @@ void taskLeitura(void *parameter) {
     int leituraPot = analogRead(POTENCIOMETRO);
     set_point_x = ((float)leituraPot / 4095.0f) * guia - guia/2.0;
 
-    Serial.println(leituraPot);
-    //Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x*100, x_dot*100);
+    Serial.printf("%.4f;%.2f;%.2f;%.2f;%.2f\n", tempo_s, theta*180/PI, theta_dot, x*100, x_dot*100);
   }
 }
 
