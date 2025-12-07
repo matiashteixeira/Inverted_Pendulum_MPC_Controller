@@ -6,7 +6,7 @@ run Codigos\P1_Modelo_Do_Sistema.m;
 %%
 
 % Definição das matrizes de ponderamento do LQR
-controlador.lqr.Q = diag([250 100 1 1]);controlador.lqr.R = 0.01;
+controlador.lqr.Q = diag([10 5 1 1]);controlador.lqr.R = 0.01;
 controlador.lqr.K = dlqr(dados.planta.A,dados.planta.B,controlador.lqr.Q,controlador.lqr.R);
 
 %% Simulação em malha fechada

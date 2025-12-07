@@ -102,7 +102,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 
 %% Simulação do Modelo - Degrau
 
-% % Parâmetros
+% % % Parâmetros
 % t_final = dados.geral.Tf;         
 % tau = dados.geral.Ts;
 % amplitude_degrau = 200*12/255; % Volt
@@ -126,7 +126,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % x(:, 3) = x(:, 3).*100;
 % x(:, 4) = x(:, 4).*((180)/pi);
 % 
-% % Modelo Contínuo
+% % % Modelo Contínuo
 % tspan = [0 t_final];
 % 
 % [t2,x2] = ode45(@(t2,x2) Modelo_Continuo_Script_Degrau(t2, x2, dados, duracao_degrau, amplitude_degrau), tspan, x0);
@@ -135,7 +135,7 @@ clear g m l I b M c Rm Kb Kt r alpha A B C D Ac Bc tau;
 % x2(:, 2) = x2(:, 2).*((180)/pi);
 % x2(:, 3) = x2(:, 3).*100;
 % x2(:, 4) = x2(:, 4).*((180)/pi);
-% 
+% % 
 % clear amplitude_degrau duracao_degrau k t_final tau tspan x0;
 
 %% Simulação do Modelo - Senoide

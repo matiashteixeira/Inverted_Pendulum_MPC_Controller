@@ -5,7 +5,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#include <WiFi.h>
+#include <MPC.h>
 
 // ==============================
 // CONFIGURAÇÃO DOS PINOS
@@ -28,13 +28,6 @@
 #define OLED_ADDR 0x3C
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
-
-// ==============================
-// CONFIGURAÇÃO DO WIFI
-// ==============================
-const char* ssid = "Gurin 2G";
-const char* senha = "DONAMARCIA123";
-
 
 // ==============================
 // VARIÁVEIS DE LEITURA DOS ENCODERS
@@ -103,6 +96,15 @@ const unsigned long buttonDebounce = 1000;
 bool ajustandoPosicao = false; 
 bool ajustou = false;
 
+
+// ==============================
+// VARIÁVEIS DO CONTROLE MPC
+// ==============================
+MPC mpc;
+float pos_limite = 20.0/100.0;
+float ang_limite = 12.0 * (M_PI/180.0);
+float vel_limite = 45.0/100.0;
+float comando_limite = 12.0;
 
 // ==============================
 // DADOS DA PLANTA
@@ -330,6 +332,81 @@ void ativaControladorLQR(){
   }
 }
 
+
+// ==============================
+// FUNÇÃO PARA CONTROLE MPC
+// ==============================
+void setupMPC(){
+  // =========================
+  // MATRIZES DO MODELO
+  // =========================
+  mpc.A = Matrix(4,4);
+  mpc.A(0,0)=1.0000; mpc.A(0,1)=0.0000; mpc.A(0,2)=0.0091;  mpc.A(0,3)=0.0000;
+  mpc.A(1,0)=0.0000; mpc.A(1,1)=1.0022; mpc.A(1,2)=-0.0039; mpc.A(1,3)=0.0100;
+  mpc.A(2,0)=0.0000; mpc.A(2,1)=0.0044; mpc.A(2,2)=0.8224;  mpc.A(2,3)=0.0000;
+  mpc.A(3,0)=0.0000; mpc.A(3,1)=0.4346; mpc.A(3,2)=-0.7526; mpc.A(3,3)=1.0021;
+
+  mpc.B = Matrix(4,1);
+  mpc.B(0,0)=0.0000;
+  mpc.B(1,0)=0.0001;
+  mpc.B(2,0)=0.0068;
+  mpc.B(3,0)=0.0288;
+
+  // =========================
+  // MATRIZ DE SAÍDA
+  // =========================
+  mpc.Cr = Matrix(2,4);
+  mpc.Cr(0,0)=1; mpc.Cr(0,1)=0; mpc.Cr(0,2)=0; mpc.Cr(0,3)=0;
+  mpc.Cr(1,0)=0; mpc.Cr(1,1)=1; mpc.Cr(1,2)=0; mpc.Cr(1,3)=0;
+
+  mpc.Cc = Matrix(3,4);
+  mpc.Cc(0,0)=1; mpc.Cc(0,1)=0; mpc.Cc(0,2)=0; mpc.Cc(0,3)=0;
+  mpc.Cc(1,0)=0; mpc.Cc(1,1)=1; mpc.Cc(1,2)=0; mpc.Cc(1,3)=0;
+  mpc.Cc(2,0)=0; mpc.Cc(2,1)=0; mpc.Cc(2,2)=1; mpc.Cc(2,3)=0;
+
+  // =========================
+  // PESOS DO MPC
+  // =========================
+  mpc.Qy = Matrix(2,2);
+  mpc.Qy(0,0)=50; mpc.Qy(0,1)=0;
+  mpc.Qy(1,0)=10; mpc.Qy(1,1)=10;
+
+  mpc.Qu = Matrix(1,1);
+  mpc.Qu(0,0) = 0.001;
+
+  mpc.N = 35;
+
+  // =========================
+  // LIMITES
+  // =========================
+  mpc.ycmax = Matrix(3,1);
+  mpc.ycmax(0,0)= pos_limite;
+  mpc.ycmax(1,0)= ang_limite;
+  mpc.ycmax(2,0)= vel_limite;
+
+  mpc.ycmin = Matrix(3,1);
+  mpc.ycmin(0,0)= -pos_limite;
+  mpc.ycmin(1,0)= -ang_limite;
+  mpc.ycmin(2,0)= -vel_limite;
+
+  mpc.umax = Matrix(1,1); 
+  mpc.umax(0,0) = comando_limite;
+
+  mpc.umin = Matrix(1,1); 
+  mpc.umin(0,0) = -comando_limite;
+
+  mpc.deltamax = Matrix(1,1); 
+  mpc.deltamax(0,0) = 1e5;
+
+  mpc.deltamin = Matrix(1,1); 
+  mpc.deltamin(0,0) = -1e5;
+
+  // =========================
+  // CALCULA MATRIZES
+  // =========================
+  mpc.compute_MPC_Matrices();
+}
+
 // ==============================
 // FUNÇÃO PARA ATIVAÇÃO PELOS BOTÕES FÍSICOS
 // ==============================
@@ -399,6 +476,89 @@ void gerenciaBotoes(){
             }
         }
     }
+}
+
+
+// ======================================================================
+//  DISPLAY OLED
+// ======================================================================
+void telaBoasVindas() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(20, 8);
+  display.println("Projeto");
+
+  display.setCursor(10, 22);
+  display.println("Lab Integrador");
+
+  display.setCursor(0, 48);
+  display.println("Inicializando...");
+
+  display.display();
+  delay(2500);
+}
+
+void telaCalibrandoPendulo() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 8);
+  display.println("Calibrando pendulo...");
+  display.setCursor(0, 28);
+  display.println("Deixe em repouso");
+
+  display.display();
+}
+
+void atualizarDisplay() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // ----- Titulo centralizado -----
+  display.setTextSize(1);
+  const char titulo[] = "Projeto LabIntegrador";
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(titulo, 0, 0, &x1, &y1, &w, &h);
+  int16_t xTitulo = (SCREEN_WIDTH - w) / 2;
+  display.setCursor(xTitulo, 0);
+  display.print(titulo);
+
+  // Linha separadora
+  display.drawLine(0, 10, SCREEN_WIDTH - 1, 10, SSD1306_WHITE);
+
+  // ----- Bloco MOTOR -----
+  display.setTextSize(1);
+  display.setCursor(0, 14);
+  display.print("Posição");
+
+  display.setTextSize(2);
+  display.setCursor(50, 24);
+  display.print(x*100, 1);
+
+  display.setTextSize(1);
+  display.setCursor(0, 30);
+  display.print("cm");
+
+  display.drawLine(0, 42, SCREEN_WIDTH - 1, 42, SSD1306_WHITE);
+
+  // ----- Bloco PENDULO -----
+  display.setTextSize(1);
+  display.setCursor(0, 46);
+  display.print("Set Point");
+
+  display.setTextSize(2);
+  display.setCursor(50, 52 - 8);
+  display.print(set_point_x, 1);
+
+  display.setTextSize(1);
+  display.setCursor(0, 62 - 4);
+  display.print("deg");
+
+  display.display();
 }
 
 
@@ -607,87 +767,6 @@ void taskDisplay(void *parameter) {
     }
 }
 
-// ======================================================================
-//  DISPLAY OLED
-// ======================================================================
-void telaBoasVindas() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  display.setCursor(20, 8);
-  display.println("Projeto");
-
-  display.setCursor(10, 22);
-  display.println("Lab Integrador");
-
-  display.setCursor(0, 48);
-  display.println("Inicializando...");
-
-  display.display();
-  delay(2500);
-}
-
-void telaCalibrandoPendulo() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  display.setCursor(0, 8);
-  display.println("Calibrando pendulo...");
-  display.setCursor(0, 28);
-  display.println("Deixe em repouso");
-
-  display.display();
-}
-
-void atualizarDisplay() {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-
-  // ----- Titulo centralizado -----
-  display.setTextSize(1);
-  const char titulo[] = "Projeto LabIntegrador";
-  int16_t x1, y1;
-  uint16_t w, h;
-  display.getTextBounds(titulo, 0, 0, &x1, &y1, &w, &h);
-  int16_t xTitulo = (SCREEN_WIDTH - w) / 2;
-  display.setCursor(xTitulo, 0);
-  display.print(titulo);
-
-  // Linha separadora
-  display.drawLine(0, 10, SCREEN_WIDTH - 1, 10, SSD1306_WHITE);
-
-  // ----- Bloco MOTOR -----
-  display.setTextSize(1);
-  display.setCursor(0, 14);
-  display.print("Posição");
-
-  display.setTextSize(2);
-  display.setCursor(50, 24);
-  display.print(x*100, 1);
-
-  display.setTextSize(1);
-  display.setCursor(0, 30);
-  display.print("cm");
-
-  display.drawLine(0, 42, SCREEN_WIDTH - 1, 42, SSD1306_WHITE);
-
-  // ----- Bloco PENDULO -----
-  display.setTextSize(1);
-  display.setCursor(0, 46);
-  display.print("Set Point");
-
-  display.setTextSize(2);
-  display.setCursor(50, 52 - 8);
-  display.print(set_point_x, 1);
-
-  display.setTextSize(1);
-  display.setCursor(0, 62 - 4);
-  display.print("deg");
-
-  display.display();
-}
 
 // ==============================
 // CONFIGURAÇÃO INICIAL
@@ -726,11 +805,14 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENCODER_MOT_A),  updateEncoderMot,  CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_MOT_B),  updateEncoderMot,  CHANGE);
 
+  // Inicia Controlador MPC
+  setupMPC();
+  mpc.printMatrix(mpc.H);
+
   // Cria tarefa FreeRTOS
   xTaskCreatePinnedToCore(taskLeitura, "TaskLeitura", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(taskSerial,   "TaskSerial",  2048, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(taskDisplay, "TaskDisplay", 4096, NULL, 1, NULL, 0);
-
 }
 
 void loop() {
