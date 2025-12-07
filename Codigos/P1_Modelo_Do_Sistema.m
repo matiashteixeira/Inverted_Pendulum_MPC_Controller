@@ -51,6 +51,9 @@ dados.motor.R  = 0.071;         % [-]      Relação de transmissão (1/14)
 % ==============================
 dados.carro.Fc = 0.035;      % N
 
+dados.controlador.energia.k = 44;
+dados.controlador.energia.n = 1;
+
 %% Geração das matrizes de espaço de estados
 
 % Estados x1=x, x2=theta, x3=x_ponto, x4=theta_ponto

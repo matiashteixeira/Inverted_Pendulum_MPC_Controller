@@ -10,21 +10,19 @@ B = dados.planta.B;
 tau = dados.geral.Ts; 
 
 %pos_limite = dados.geral.guia/2*0.8;
-pos_limite = inf/100;
-ang_limite = inf*(pi/180);
-vel_limite = inf/100;
-vel_ang_limite = inf;
-comando_limite = inf;
+pos_limite = 20/100;
+ang_limite = 12*(pi/180);
+vel_limite = 45/100;
+comando_limite = 12;
 
-ang_inicial = 185*(pi/180);
+ang_inicial = 0*(pi/180);
 pos_inicial = 0/100;
 
-pos_spt = 0/100;
+pos_spt = 5/100;
 
-tsim=10;
+tsim=30;
 
 qp_error_count = 0;
-QP_MAX_FAIL = 5;
 
 %% Variáveis do MPC
 
@@ -34,17 +32,17 @@ MPC.A = A;
 MPC.B = B;
 
 % Definição das variáveis rastreadas
-MPC.Cr = eye(4);
+MPC.Cr = [1 0 0 0; 0 1 0 0];
 
-MPC.Qy = diag([250 100 1 1]);
-MPC.Qu = 0.01;
-MPC.N = 50; 
+MPC.Qy = diag([50 10]);
+MPC.Qu = 0.001;
+MPC.N = 35; 
 
 % Definição das variáveis restringidas
-MPC.Cc = eye(4);
+MPC.Cc = [1 0 0 0; 0 1 0 0; 0 0 1 0];
 
 % Definição das restrições
-MPC.ycmin = [-pos_limite; -ang_limite; -vel_limite; -vel_ang_limite]; MPC.ycmax= [pos_limite; ang_limite; vel_limite; vel_ang_limite]; 
+MPC.ycmin = [-pos_limite; -ang_limite; -vel_limite]; MPC.ycmax= [pos_limite; ang_limite; vel_limite]; 
 MPC.umin = -comando_limite; MPC.umax = comando_limite; 
 MPC.ulast = 0; MPC.deltamin=-100000; MPC.deltamax=100000;
 
@@ -67,8 +65,7 @@ lesu=zeros(nt, 1);
 
 % Sinal de referência
 yref = zeros(length(lest)*num_var_reguladas,1); 
-yref(1:4:end) = pos_spt;  
-yref(2:4:end) = pi;  
+yref(1:2:end) = pos_spt;  
 
 lesx(1,:)=x0';
 lesy(1,:) = MPC.Cr*lesx(1, :)'; 
@@ -76,76 +73,80 @@ lesy(1,:) = MPC.Cr*lesx(1, :)';
 x_des = [0 180*pi/180 0 0];
 
 % Opções para o qpOASES e inicialização
-options_qpOASES = qpOASES_options('maxIter', 100000);
+options = qpOASES_options('default');
+options.enableFarBounds = 0;
+options.maxIter = 1000;                
+options.terminationTolerance = 1e-3;
+options.boundTolerance = 1e-6;
+options.enableRegularisation = 1;
 QP = [];
 
 sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
 
 for i=1:nt-MPC.N
 
-    xplus = RK4_discrete(lesx(i,:),u,tau,dados);
-
-
-    yref_pred=yref(i*num_var_reguladas + 1 : (i+MPC.N)*num_var_reguladas);
-
-    %if abs(i - (nt-1)/2) < tau/2
-    %    lesx(i,4) = lesx(i,4) + 80*pi/180;
-    %end
-    err = xplus-x_des;
-
-    F=MPC.F1*err'+MPC.F2*yref_pred;
-    Bineq=MPC.G1*xplus'+MPC.G2*MPC.ulast+MPC.G3; 
-
-    try
-        if i == 1 || isempty(QP)
-            [QP, utilde_opt, ~, exitflag, ~, ~] = qpOASES_sequence('i', MPC.H, F, MPC.Aineq, MPC.utildemin, MPC.utildemax, [], Bineq, options_qpOASES);
-        else
-            [utilde_opt, ~, exitflag, ~, ~] = qpOASES_sequence('h', QP, F, MPC.utildemin, MPC.utildemax, [], Bineq, options_qpOASES);
-        end
-
-        % Se não convergiu → conta erro
-        if exitflag ~= 0 || any(~isfinite(utilde_opt))
-            qp_error_count = qp_error_count + 1;
-        else
-            qp_error_count = 0;
-        end
-    
-    catch
-        qp_error_count = qp_error_count + 1;
+    if abs(i - (nt-1)/2) < tau/2
+        lesx(i,4) = lesx(i,4) - 65*pi/180;
     end
+
+    xplus = RK4_discrete(lesx(i,:),u,tau,dados);
     
-    %if qp_error_count >= QP_MAX_FAIL
-        % SwingUp
-    %    u = EnergySwingUpController(lesx(i,:)', dados);
-    %    u = sat(u,12,-12);
-    %else
-        % MPC
-        u=P_i(1, nu, MPC.N)*utilde_opt;
-    %end
+    usar_MPC = (abs(xplus(2)-pi) < 8*pi/180) && (qp_error_count == 0) && (abs(xplus(4)) < 90*pi/180);
+    if usar_MPC
+        yref_pred=yref(i*num_var_reguladas + 1 : (i+MPC.N)*num_var_reguladas);
+        err = xplus-x_des;
+    
+        F=MPC.F1*err'+MPC.F2*yref_pred;
+        Bineq=MPC.G1*err'+MPC.G2*MPC.ulast+MPC.G3; 
+    
+        try
+            if i == 1 || isempty(QP)
+                [QP, utilde_opt, ~, exitflag, ~, ~] = qpOASES_sequence('i', MPC.H, F, MPC.Aineq, MPC.utildemin, MPC.utildemax, [], Bineq, options);
+            else
+                [utilde_opt, ~, exitflag, ~, ~] = qpOASES_sequence('h', QP, F, MPC.utildemin, MPC.utildemax, [], Bineq, options);
+            end
+
+            u=P_i(1, nu, MPC.N)*utilde_opt;
+    
+            if exitflag ~= 0 || any(~isfinite(utilde_opt))
+                qp_error_count = qp_error_count + 1;
+            else
+                qp_error_count = 0;
+            end
+        catch
+            qp_error_count = qp_error_count + 1;
+        end  
+    else
+       
+       u = EnergySwingUpController(xplus, dados);
+
+       if(abs(xplus(1)) >= 0.18)
+           u = -100 * xplus(1);
+       else
+            qp_error_count = 0;
+       end
+       u = sat(u,12,-12);   
+    end
     
     lesu (i, :)=u'; 
     MPC.ulast=u;
     lesx(i+1, :)=xplus;
     lesy(i+1, :)=MPC.Cr*xplus';
-
 end
 
 Nplot = nt - MPC.N;
 
 posicao = lesx(1:Nplot,1).*100;
-angulo = lesx(1:Nplot,2).*180/pi;
+angulo = wrapTo360(lesx(1:Nplot,2).*180/pi);
 velocidade = lesx(1:Nplot,3).*100;
 vel_angular = lesx(1:Nplot,4).*180/pi;
 comando = lesu(1:Nplot);
 tempo = lest(1:Nplot);
 
-pos_ref = yref(1:4:4*Nplot) * 100;      
-ang_ref = yref(2:4:4*Nplot) * 180/pi;   
-vel_ref = yref(3:4:4*Nplot) * 100;      
-vag_ref = yref(4:4:4*Nplot) * 180/pi; 
+pos_ref = yref(1:2:2*Nplot) * 100;      
 
 clear A B Bineq err F i lest lesy lesx lesu MPC n nt nu num_var_reguladas Nplot options_qpOASES pos_inicial;
-clear ang_inicial pos_spt QP tau tsim u utilde_opt x0 x_des xplus yref yref_pred;
+clear ang_inicial pos_spt QP tau tsim u utilde_opt x0 x_des xplus yref yref_pred sat usar_MPC QP_MAX_FAIL exitflag qp_error_count;
 
 %% Plot dos resultados
 
@@ -188,7 +189,6 @@ figure;
 hold on; grid on;
 
 plot(tempo, angulo, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
-plot(tempo, ang_ref, '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13])
 
 plot(tempo,  180+ang_limite*180/pi * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
 plot(tempo, 180-ang_limite*180/pi * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
@@ -196,7 +196,7 @@ plot(tempo, 180-ang_limite*180/pi * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
 title('Ângulo (°)')
 xlabel('Tempo (s)')
 ylabel('Ângulo (°)')
-legend('Ângulo','Referência','Limite Sup','Limite Inf','Location','best')
+legend('Ângulo','Limite Sup','Limite Inf','Location','best')
 
 
 
@@ -205,7 +205,6 @@ figure;
 hold on; grid on;
 
 plot(tempo, velocidade, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
-plot(tempo, vel_ref,    '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13])
 
 plot(tempo,  vel_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
 plot(tempo, -vel_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
@@ -213,7 +212,7 @@ plot(tempo, -vel_limite*100 * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
 title('Velocidade (cm/s)')
 xlabel('Tempo (s)')
 ylabel('Velocidade (cm/s)')
-legend('Velocidade','Referência','Limite Sup','Limite Inf','Location','best')
+legend('Velocidade','Limite Sup','Limite Inf','Location','best')
 
 
 
@@ -222,15 +221,11 @@ figure;
 hold on; grid on;
 
 plot(tempo, vel_angular, 'LineWidth', 2.5, 'Color', [0 0.45 0.74])
-plot(tempo, vag_ref,     '--', 'LineWidth', 2.5, 'Color', [0.93 0.69 0.13])
-
-plot(tempo,  vel_ang_limite * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
-plot(tempo, -vel_ang_limite * ones(size(tempo)),  'r--', 'LineWidth', 2.5)
 
 title('Velocidade Angular (°/s)')
 xlabel('Tempo (s)')
 ylabel('Vel Angular (°/s)')
-legend('Vel. Angular','Referência','Limite Sup','Limite Inf','Location','best')
+legend('Vel. Angular','Location','best')
 
 clear ang_limite ang_ref angulo pos_limite comando comando_limite pos_ref posicao tempo vag_ref vel_ang_limite vel_angular vel_limite vel_ref velocidade;
 %%
