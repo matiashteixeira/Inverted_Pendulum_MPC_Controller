@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 // ==============================
 // INCLUSÃO DAS BIBLIOTECAS
 // ==============================
@@ -8,20 +6,22 @@
 #include <Adafruit_SSD1306.h>
 
 #include <WiFi.h>
-#include <MPC.h>
 
 // ==============================
 // CONFIGURAÇÃO DOS PINOS
 // ==============================
 #define ENCODER_PEND_A 33
-#define ENCODER_PEND_B 32
-#define ENCODER_MOT_A 13
-#define ENCODER_MOT_B 14
+#define ENCODER_PEND_B 25
+#define ENCODER_MOT_A 14
+#define ENCODER_MOT_B 13
 
 #define POTENCIOMETRO 34
 
 #define MOTOR_PWM1 27
 #define MOTOR_PWM2 26
+
+#define BOT_LIGA 4
+#define BOT_DESLIGA 15
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -29,12 +29,12 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-
 // ==============================
 // CONFIGURAÇÃO DO WIFI
 // ==============================
 const char* ssid = "Gurin 2G";
 const char* senha = "DONAMARCIA123";
+
 
 // ==============================
 // VARIÁVEIS DE LEITURA DOS ENCODERS
@@ -81,21 +81,27 @@ volatile uint8_t pwmManual = 180;
 
 
 // ==============================
-// VARIÁVEIS DO CONTROLE
+// VARIÁVEIS DO CONTROLE LQR
 // ==============================
 
-// Variáveis do controlador
-volatile bool controleAtivo = false;
+// Variáveis do controlador LQR
+volatile bool controleLQRAtivo = false;
 float K[4] = {0, 0, 0, 0};
 float K_swing = 45;
 
 // Limiares de troca
 const float THETA_SWITCH = 12 * PI/180.0;       
-const float THETA_DOT_SWITCH = 15 * PI/180.0;  
+const float THETA_DOT_SWITCH = 100 * PI/180.0;  
 const float FIM_CURSO_VIRTUAL =  0.20; 
 
 // Setpoint posição
 float set_point_x = 0.0;
+
+// Comando via botões físicos
+unsigned long lastButtonTime = 0;
+const unsigned long buttonDebounce = 1000;
+bool ajustandoPosicao = false; 
+bool ajustou = false;
 
 
 // ==============================
@@ -197,7 +203,7 @@ void controleManual() {
     ledcWrite(0, pwmManual);
     ledcWrite(1, 0);
   }
-  else {
+  else if (comandoManual == 'P'){
     ledcWrite(0, 0);
     ledcWrite(1, 0);
   }
@@ -276,7 +282,7 @@ float swingUpController() {
 // ==============================
 // FUNÇÃO PARA CONTROLE LQR
 // ==============================
-void controleEstado() {
+void controleEstadoLQR() {
 
   float erroX = x - (set_point_x / 100.0f);  // converte cm → metros, se sua pos está em m
   float erroTheta = theta - PI; 
@@ -306,87 +312,93 @@ void controleEstado() {
   }
 }
 
-
-// ======================================================================
-//  DISPLAY OLED
-// ======================================================================
-void telaBoasVindas() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  display.setCursor(20, 8);
-  display.println("Projeto");
-
-  display.setCursor(10, 22);
-  display.println("Lab Integrador");
-
-  display.setCursor(0, 48);
-  display.println("Inicializando...");
-
-  display.display();
-  delay(2500);
+void desativaControladorLQR(){
+  controleLQRAtivo = false;
+  ledcWrite(0, 0);
+  ledcWrite(1, 0);
 }
 
-void telaCalibrandoPendulo() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
+void ativaControladorLQR(){
+  controleLQRAtivo = true;
+  degrauAtivo = false;
+  senoideAtiva = false;
 
-  display.setCursor(0, 8);
-  display.println("Calibrando pendulo...");
-  display.setCursor(0, 28);
-  display.println("Deixe em repouso");
-
-  display.display();
+  if (theta == 0) {
+    ledcWrite(1, 200);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    ledcWrite(1, 0);
+  }
 }
 
-void atualizarDisplay() {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
+// ==============================
+// FUNÇÃO PARA ATIVAÇÃO PELOS BOTÕES FÍSICOS
+// ==============================
+void ajustaPosInicial() {
+    int leitura = analogRead(POTENCIOMETRO);
+    const int centro = 2048;
+    const int zonaMorta = 150;
+    int erro = leitura - centro;
 
-  // ----- Titulo centralizado -----
-  display.setTextSize(1);
-  const char titulo[] = "Projeto LabIntegrador";
-  int16_t x1, y1;
-  uint16_t w, h;
-  display.getTextBounds(titulo, 0, 0, &x1, &y1, &w, &h);
-  int16_t xTitulo = (SCREEN_WIDTH - w) / 2;
-  display.setCursor(xTitulo, 0);
-  display.print(titulo);
+    if (abs(erro) < zonaMorta) {
+        ledcWrite(0, 0);
+        ledcWrite(1, 0);
+        ajustandoPosicao = false;
+        return;
+    }
 
-  // Linha separadora
-  display.drawLine(0, 10, SCREEN_WIDTH - 1, 10, SSD1306_WHITE);
+    float Kp = 0.1;
+    int velocidade = abs(erro) * Kp;
+    velocidade = constrain(velocidade, 0, 255);
 
-  // ----- Bloco MOTOR -----
-  display.setTextSize(1);
-  display.setCursor(0, 14);
-  display.print("Posição");
+    if (erro < 0) {
+        ledcWrite(1, 0);
+        ledcWrite(0, velocidade); // DIREITA
+    } else {
+        ledcWrite(0, 0);
+        ledcWrite(1, velocidade); // ESQUERDA
+    }
+}
 
-  display.setTextSize(2);
-  display.setCursor(50, 24);
-  display.print(x*100, 1);
+void ativaAjustePosInicial() {
+    controleLQRAtivo = false;
+    degrauAtivo = false;
+    senoideAtiva = false;
+    comandoManual = 'P';
 
-  display.setTextSize(1);
-  display.setCursor(0, 30);
-  display.print("cm");
+    ajustandoPosicao = true;
+    ajustou = true;  // Flag para zerar o encoder
+}
 
-  display.drawLine(0, 42, SCREEN_WIDTH - 1, 42, SSD1306_WHITE);
+void gerenciaBotoes(){
+    if (millis() - lastButtonTime > buttonDebounce) {
+        if (digitalRead(BOT_LIGA)) {
+            delay(500); // Aguarda o usuário apertar os dois botões juntos
+            if (digitalRead(BOT_DESLIGA)) {
+                ativaAjustePosInicial();
+            } else {
+                K[0] = -15; K[1] = 140; K[2] = -80; K[3] = 20; K_swing = 25;
+                ativaControladorLQR();
+            }
+            lastButtonTime = millis();
+        } else {
+            if (digitalRead(BOT_DESLIGA)) {
+                degrauAtivo = false;
+                senoideAtiva = false;
+                ajustandoPosicao = false;
+                desativaControladorLQR();
 
-  // ----- Bloco PENDULO -----
-  display.setTextSize(1);
-  display.setCursor(0, 46);
-  display.print("Set Point");
+                if(ajustou){
+                    encoderPendCount = 0;
+                    encoderMotCount = 0;
+                    lastEncodedPend = 0;
+                    lastEncodedMot = 0;
+                    ajustou = false;
+                }
 
-  display.setTextSize(2);
-  display.setCursor(50, 52 - 8);
-  display.print(set_point_x, 1);
-
-  display.setTextSize(1);
-  display.setCursor(0, 62 - 4);
-  display.print("deg");
-
-  display.display();
+                lastButtonTime = millis();
+            }
+        }
+    }
 }
 
 
@@ -405,15 +417,19 @@ void taskLeitura(void *parameter) {
   while (true) {
     vTaskDelayUntil(&xLastWakeTime, periodo);
 
-    if(controleAtivo){
-      controleEstado();
+    if(ajustandoPosicao){
+        ajustaPosInicial();
+    } else if(controleLQRAtivo){
+        controleEstadoLQR();
     } else if(degrauAtivo){
-      aplicaDegrau();
+        aplicaDegrau();
     } else if(senoideAtiva){
-      aplicaSenoide();
+        aplicaSenoide();
     } else {
-      controleManual();
+        controleManual();
     }
+
+    gerenciaBotoes();
 
     tempo_s = millis() / 1000.0;
 
@@ -534,20 +550,12 @@ void taskSerial(void *parameter) {
                             K[3] = buffer.substring(idx4 + 1, idx5).toFloat();
                             K_swing = buffer.substring(idx5 + 1).toFloat();
 
-                            controleAtivo = true;
-                            degrauAtivo = false;
-                            senoideAtiva = false;
-
-                            if(theta == 0){
-                              ledcWrite(1, 200);
-                            }
+                            ativaControladorLQR();
                         }
                     }
 
                     else if (comando == 'X') {
-                        controleAtivo = false;  // desativa controle automático
-                        ledcWrite(0, 0);        // motor para por segurança
-                        ledcWrite(1, 0);
+                      desativaControladorLQR();
                     }
 
                     // ===============================
@@ -599,6 +607,87 @@ void taskDisplay(void *parameter) {
     }
 }
 
+// ======================================================================
+//  DISPLAY OLED
+// ======================================================================
+void telaBoasVindas() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(20, 8);
+  display.println("Projeto");
+
+  display.setCursor(10, 22);
+  display.println("Lab Integrador");
+
+  display.setCursor(0, 48);
+  display.println("Inicializando...");
+
+  display.display();
+  delay(2500);
+}
+
+void telaCalibrandoPendulo() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 8);
+  display.println("Calibrando pendulo...");
+  display.setCursor(0, 28);
+  display.println("Deixe em repouso");
+
+  display.display();
+}
+
+void atualizarDisplay() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // ----- Titulo centralizado -----
+  display.setTextSize(1);
+  const char titulo[] = "Projeto LabIntegrador";
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(titulo, 0, 0, &x1, &y1, &w, &h);
+  int16_t xTitulo = (SCREEN_WIDTH - w) / 2;
+  display.setCursor(xTitulo, 0);
+  display.print(titulo);
+
+  // Linha separadora
+  display.drawLine(0, 10, SCREEN_WIDTH - 1, 10, SSD1306_WHITE);
+
+  // ----- Bloco MOTOR -----
+  display.setTextSize(1);
+  display.setCursor(0, 14);
+  display.print("Posição");
+
+  display.setTextSize(2);
+  display.setCursor(50, 24);
+  display.print(x*100, 1);
+
+  display.setTextSize(1);
+  display.setCursor(0, 30);
+  display.print("cm");
+
+  display.drawLine(0, 42, SCREEN_WIDTH - 1, 42, SSD1306_WHITE);
+
+  // ----- Bloco PENDULO -----
+  display.setTextSize(1);
+  display.setCursor(0, 46);
+  display.print("Set Point");
+
+  display.setTextSize(2);
+  display.setCursor(50, 52 - 8);
+  display.print(set_point_x, 1);
+
+  display.setTextSize(1);
+  display.setCursor(0, 62 - 4);
+  display.print("deg");
+
+  display.display();
+}
 
 // ==============================
 // CONFIGURAÇÃO INICIAL
