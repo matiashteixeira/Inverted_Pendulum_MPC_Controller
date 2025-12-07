@@ -82,7 +82,7 @@ options.enableRegularisation = 1;
 QP = [];
 
 sat = @(x, x_max, x_min) min( x_max, max(x_min,x));
-
+%%
 for i=1:nt-MPC.N
 
     if abs(i - (nt-1)/2) < tau/2
@@ -145,8 +145,8 @@ tempo = lest(1:Nplot);
 
 pos_ref = yref(1:2:2*Nplot) * 100;      
 
-clear A B Bineq err F i lest lesy lesx lesu MPC n nt nu num_var_reguladas Nplot options_qpOASES pos_inicial;
-clear ang_inicial pos_spt QP tau tsim u utilde_opt x0 x_des xplus yref yref_pred sat usar_MPC QP_MAX_FAIL exitflag qp_error_count;
+%clear A B Bineq err F i lest lesy lesx lesu n nt nu num_var_reguladas Nplot options_qpOASES pos_inicial;
+%clear ang_inicial pos_spt QP tau tsim u utilde_opt x0 x_des xplus yref yref_pred sat usar_MPC QP_MAX_FAIL exitflag qp_error_count;
 
 %% Plot dos resultados
 
@@ -227,7 +227,7 @@ xlabel('Tempo (s)')
 ylabel('Vel Angular (°/s)')
 legend('Vel. Angular','Location','best')
 
-clear ang_limite ang_ref angulo pos_limite comando comando_limite pos_ref posicao tempo vag_ref vel_ang_limite vel_angular vel_limite vel_ref velocidade;
+%clear ang_limite ang_ref angulo pos_limite comando comando_limite pos_ref posicao tempo vag_ref vel_ang_limite vel_angular vel_limite vel_ref velocidade;
 %%
 
 % print_cpp_matrix("H", MPC.H);
