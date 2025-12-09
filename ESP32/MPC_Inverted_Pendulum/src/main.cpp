@@ -105,6 +105,7 @@ float pos_limite = 20.0/100.0;
 float ang_limite = 12.0 * (M_PI/180.0);
 float vel_limite = 45.0/100.0;
 float comando_limite = 12.0;
+float ulast = 0;
 
 // ==============================
 // DADOS DA PLANTA
@@ -405,6 +406,38 @@ void setupMPC(){
   // CALCULA MATRIZES
   // =========================
   mpc.compute_MPC_Matrices();
+}
+
+void controleEstadoMPC() {
+
+  float erroX = x - (set_point_x / 100.0f);  // converte cm → metros, se sua pos está em m
+  float erroTheta = theta - PI; 
+
+  float u = 0;
+
+  bool emZonaPerigo = abs(x) > FIM_CURSO_VIRTUAL;
+  bool emRegiaoMPC = (abs(erroTheta) < THETA_SWITCH) && (abs(theta_dot) < THETA_DOT_SWITCH);
+
+  if (emZonaPerigo){
+    u = - (K[1] * erroX + K[3] * x_dot);
+  }else if(emRegiaoMPC){
+    float estados[4] = {x, erroTheta, x_dot, theta_dot};
+    u = mpc.compute_MPC_Command(ulast, set_point_x, estados);
+  }else{
+    u = swingUpController();
+  }
+
+  u = constrain(u, -12.0, 12.0);
+  ulast = u;
+  float u_pwm = (u / 12.0) * 255.0;
+  
+  if (u_pwm >= 0) {
+    ledcWrite(0, (int)u_pwm);
+    ledcWrite(1, 0);
+  } else {
+    ledcWrite(0, 0);
+    ledcWrite(1, (int)(-u_pwm));
+  }
 }
 
 // ==============================

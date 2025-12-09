@@ -1,11 +1,11 @@
 #ifndef MPC_H
 #define MPC_H
 
+#define __USE_SINGLE_PRECISION__
+
 #include <vector>
-#include <string>
-#include <iostream>
-#include <cassert>
 #include <Arduino.h>
+#include <qpOASES.hpp>
 
 
 struct Matrix {
@@ -31,6 +31,7 @@ public:
     Matrix umax, umin;
 
     Matrix H, F1, F2, F3;
+    std::vector<qpOASES::real_t> H_qp, A_qp, lb_qp, ub_qp;
     Matrix Aineq, G1, G2, G3;
 
     std::vector<float> utildemax;
@@ -39,12 +40,19 @@ public:
     MPC();
 
     void compute_MPC_Matrices();
+    float compute_MPC_Command(float ulast, float pos_spt, float estados[4]);
     void printMatrix(const Matrix& M);
+    
 
 private:
-    void compute_cost_matrices();
-    void compute_constraints_matrices();
+    qpOASES::QProblem *qp = nullptr;
+    bool qp_initialized = false;
 
+    Matrix generate_yref(float pos_spt);
+    std::vector<qpOASES::real_t> matrix_to_realt(const Matrix& M);
+    std::vector<qpOASES::real_t> vector_to_realt(const std::vector<float>& v);
+    void compute_Cost_Matrices();
+    void compute_Constraints_Matrices();
 };
 
 #endif

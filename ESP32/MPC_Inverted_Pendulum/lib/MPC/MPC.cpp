@@ -27,13 +27,20 @@ Matrix P_i(size_t i, size_t n1, size_t N){
 MPC::MPC(){}
 
 void MPC::compute_MPC_Matrices(){
-    compute_cost_matrices();
-    compute_constraints_matrices();
+    compute_Cost_Matrices();
+    compute_Constraints_Matrices();
     utildemax.clear(); utildemin.clear();
     for(size_t i=0;i<N;i++){
         for(size_t j=0;j<nu;j++) utildemax.push_back(umax(j,0));
         for(size_t j=0;j<nu;j++) utildemin.push_back(umin(j,0));
     }
+
+    H_qp = matrix_to_realt(H);          
+    A_qp = matrix_to_realt(Aineq);        
+    lb_qp = vector_to_realt(utildemin);         
+    ub_qp =  vector_to_realt(utildemax);
+
+    qp = new qpOASES::QProblem(N*nu, nc);
 }
 
 void MPC::printMatrix(const Matrix& M) {
@@ -49,7 +56,7 @@ void MPC::printMatrix(const Matrix& M) {
     }
 }
 
-void MPC::compute_cost_matrices(){
+void MPC::compute_Cost_Matrices(){
     n = A.r; nu = B.c; ny = Cr.r; nc = Cc.r;
     size_t nH = N*nu;
     H = zeros(nH, nH);
@@ -91,7 +98,7 @@ void MPC::compute_cost_matrices(){
     }
 }
 
-void MPC::compute_constraints_matrices(){
+void MPC::compute_Constraints_Matrices(){
     // Translates compute_constraits_matrices
     size_t n = A.r; size_t nu = B.c; size_t nc = Cc.r;
     if(Dc.r==0) Dc = zeros(Cc.r, B.c);
@@ -198,6 +205,84 @@ void MPC::compute_constraints_matrices(){
     G3 = Matrix(G3rows, 1, 0.0);
     for(size_t i=0;i<G3_1_v.size();++i) G3(i,0) = G3_1_v[i];
     for(size_t i=0;i<G3_2_v.size();++i) G3(G3_1_v.size()+i, 0) = G3_2_v[i];
+}
+
+Matrix MPC::generate_yref(float pos_spt) {
+
+    size_t tam = N * nc;
+
+    Matrix yref(tam, 1, 0.0f);
+
+    for (size_t i = 0; i < tam; i += 2) {
+        yref(i, 0) = pos_spt;
+    }
+
+    return yref;
+}
+
+std::vector<qpOASES::real_t> MPC::matrix_to_realt(const Matrix& M) {
+    size_t total_size = M.r * M.c;
+    std::vector<qpOASES::real_t> out(total_size);
+    
+    size_t k = 0;
+
+    for (size_t i = 0; i < M.r; i++) {
+        for (size_t j = 0; j < M.c; j++) {
+            out[k++] = static_cast<qpOASES::real_t>(M(i, j));
+        }
+    }
+
+    return out; 
+}
+
+std::vector<qpOASES::real_t> MPC::vector_to_realt(const std::vector<float>& v) {
+    std::vector<qpOASES::real_t> out(v.size());
+
+    for (size_t i = 0; i < v.size(); i++) {
+        out[i] = static_cast<qpOASES::real_t>(v[i]);
+    }
+
+    return out; 
+}
+
+float MPC::compute_MPC_Command(float ulast, float pos_spt, float estados[4]){
+    Matrix matrix_estados(n, 1);
+
+    for (size_t i = 0; i < n; i++) {
+        matrix_estados(i, 0) = estados[i];
+    }
+
+    Matrix yref_pred = generate_yref(pos_spt);
+
+    Matrix F = mul(F1, matrix_estados) + mul(F2, yref_pred);
+    Matrix Bineq = mul(G1, matrix_estados) + smul(ulast, G2) + G3;
+
+    std::vector<qpOASES::real_t> g_qp = matrix_to_realt(F);            
+    std::vector<qpOASES::real_t> ubA_qp = matrix_to_realt(Bineq);      
+
+    int nWSR = 1000;
+
+    if(!qp_initialized){
+        qp->init(H_qp.data(),g_qp.data(),A_qp.data(),lb_qp.data(),ub_qp.data(),NULL,ubA_qp.data(), nWSR);
+    } else{
+        qp->hotstart(g_qp.data(),lb_qp.data(),ub_qp.data(),NULL,ubA_qp.data(), nWSR);
+    }
+
+    qpOASES::real_t* utilde_opt;
+    qp->getPrimalSolution(utilde_opt);
+
+    // Descomente se você tiver mais de um sinal de comando
+    // Matrix P1 = P_i(1, nu, N);
+    // Matrix utilde_opt_mat(N*nu, 1); 
+
+    // for (size_t i = 0; i < N*nu; ++i) {
+    //     utilde_opt_mat(i,0) = utilde_opt[i];
+    // }
+
+    // Matrix u = mul(P1, utilde_opt_mat);
+    float u = utilde_opt[0];
+
+   return 10.0;
 }
 
 #include <fstream>
