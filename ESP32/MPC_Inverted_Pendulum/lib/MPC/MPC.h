@@ -1,8 +1,6 @@
 #ifndef MPC_H
 #define MPC_H
 
-#define __USE_SINGLE_PRECISION__
-
 #include <vector>
 #include <Arduino.h>
 #include <qpOASES.hpp>

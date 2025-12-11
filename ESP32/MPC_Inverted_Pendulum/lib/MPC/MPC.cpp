@@ -35,12 +35,24 @@ void MPC::compute_MPC_Matrices(){
         for(size_t j=0;j<nu;j++) utildemin.push_back(umin(j,0));
     }
 
-    H_qp = matrix_to_realt(H);          
-    A_qp = matrix_to_realt(Aineq);        
+    H_qp = matrix_to_realt(H); 
+    H = Matrix();         
+    A_qp = matrix_to_realt(Aineq);   
+    Aineq = Matrix();      
     lb_qp = vector_to_realt(utildemin);         
     ub_qp =  vector_to_realt(utildemax);
 
-    qp = new qpOASES::QProblem(N*nu, nc);
+    qp = new qpOASES::QProblem(N*nu,nc);
+
+    qpOASES::Options options;
+    options.setToMPC();
+    //options.enableRegularisation = qpOASES::BT_TRUE; 
+    //options.numRegularisationSteps = 1; 
+    //options.epsRegularisation = 1e-4; 
+    //options.terminationTolerance = 1e-6; 
+    //options.initialStatusBounds = qpOASES::ST_INACTIVE;
+    //options.printLevel = qpOASES::PL_NONE; 
+    qp->setOptions(options);
 }
 
 void MPC::printMatrix(const Matrix& M) {
@@ -209,7 +221,7 @@ void MPC::compute_Constraints_Matrices(){
 
 Matrix MPC::generate_yref(float pos_spt) {
 
-    size_t tam = N * nc;
+    size_t tam = N * ny;
 
     Matrix yref(tam, 1, 0.0f);
 
@@ -257,18 +269,21 @@ float MPC::compute_MPC_Command(float ulast, float pos_spt, float estados[4]){
     Matrix F = mul(F1, matrix_estados) + mul(F2, yref_pred);
     Matrix Bineq = mul(G1, matrix_estados) + smul(ulast, G2) + G3;
 
-    std::vector<qpOASES::real_t> g_qp = matrix_to_realt(F);            
+    std::vector<qpOASES::real_t> g_qp = matrix_to_realt(F);     
+    F = Matrix();       
     std::vector<qpOASES::real_t> ubA_qp = matrix_to_realt(Bineq);      
+    Bineq = Matrix();
 
-    int nWSR = 1000;
+    int nWSR = 100;
 
     if(!qp_initialized){
-        qp->init(H_qp.data(),g_qp.data(),A_qp.data(),lb_qp.data(),ub_qp.data(),NULL,ubA_qp.data(), nWSR);
+        qpOASES::returnValue ret = qp->init(H_qp.data(),g_qp.data(),A_qp.data(),lb_qp.data(),ub_qp.data(),NULL,ubA_qp.data(), nWSR);
+        qp_initialized = true;
     } else{
-        qp->hotstart(g_qp.data(),lb_qp.data(),ub_qp.data(),NULL,ubA_qp.data(), nWSR);
+        qpOASES::returnValue ret = qp->hotstart(g_qp.data(),lb_qp.data(),ub_qp.data(),NULL,ubA_qp.data(), nWSR);
     }
 
-    qpOASES::real_t* utilde_opt;
+    qpOASES::real_t utilde_opt[N * nu];
     qp->getPrimalSolution(utilde_opt);
 
     // Descomente se você tiver mais de um sinal de comando
@@ -281,8 +296,7 @@ float MPC::compute_MPC_Command(float ulast, float pos_spt, float estados[4]){
 
     // Matrix u = mul(P1, utilde_opt_mat);
     float u = utilde_opt[0];
-
-   return 10.0;
+    return u;
 }
 
 #include <fstream>
